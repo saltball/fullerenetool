@@ -60,6 +60,17 @@ Don't forget to tell your contributors to also install and use pre-commit.
 
 .. _pre-commit: https://pre-commit.com/
 
+Development Note
+================
+This repository uses `setup.cfg` for configuration, and also `cython` for faster computation.
+One needs to install `cython` before development, a simple command to install is::
+
+    pip install cython
+
+and one should use `setup.py` to build and install the package for development, a simple command to build is::
+
+    python setup.py install build_ext --inplace
+
 Note
 ====
 

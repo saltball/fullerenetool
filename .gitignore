@@ -47,8 +47,12 @@ docs/_rst/*
 docs/_build/*
 cover/*
 MANIFEST
+*.cpp
 
 # Per-project virtualenvs
 .venv*/
 .conda*/
 .python-version
+
+# local developemt
+.local*
