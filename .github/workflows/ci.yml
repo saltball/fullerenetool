@@ -8,14 +8,14 @@ on:
   push:
     # Avoid using all the resources/limits available by checking only
     # relevant branches and tags. Other branches can be checked via PRs.
-    branches: [main]
-    tags: ['v[0-9]*', '[0-9]+.[0-9]+*']  # Match tags that resemble a version
-  pull_request:  # Run in every PR
-  workflow_dispatch:  # Allow manually triggering the workflow
+    branches: [master]
+    tags: ["v[0-9]*", "[0-9]+.[0-9]+*"] # Match tags that resemble a version
+  pull_request: # Run in every PR
+  workflow_dispatch: # Allow manually triggering the workflow
   schedule:
     # Run roughly every 15 days at 00:00 UTC
     # (useful to check if updates on dependencies break the package)
-    - cron: '0 0 1,16 * *'
+    - cron: "0 0 1,16 * *"
 
 permissions:
   contents: read
@@ -27,99 +27,120 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      wheel-distribution: ${{ steps.wheel-distribution.outputs.path }}
-    steps:
-      - uses: actions/checkout@v3
-        with: {fetch-depth: 0}  # deep clone for setuptools-scm
-      - uses: actions/setup-python@v4
-        id: setup-python
-        with: {python-version: "3.11"}
-      - name: Run static analysis and format checkers
-        run: pipx run pre-commit run --all-files --show-diff-on-failure
-      - name: Build package distribution files
-        run: >-
-          pipx run --python '${{ steps.setup-python.outputs.python-path }}'
-          tox -e clean,build
-      - name: Record the path of wheel distribution
-        id: wheel-distribution
-        run: echo "path=$(ls dist/*.whl)" >> $GITHUB_OUTPUT
-      - name: Store the distribution files for use in other stages
-        # `tests` and `publish` will use the same pre-built distributions,
-        # so we make sure to release the exact same package that was tested
-        uses: actions/upload-artifact@v3
-        with:
-          name: python-distribution-files
-          path: dist/
-          retention-days: 1
-
-  test:
-    needs: prepare
+  build-and-test:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python:
-        - "3.7"  # oldest Python supported by PSF
-        - "3.11"  # newest Python that is stable
-        platform:
-        - ubuntu-latest
-        - macos-latest
-        - windows-latest
-    runs-on: ${{ matrix.platform }}
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        id: setup-python
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python }}
-      - name: Retrieve pre-built distribution files
-        uses: actions/download-artifact@v3
-        with: {name: python-distribution-files, path: dist/}
-      - name: Run tests
-        run: >-
-          pipx run --python '${{ steps.setup-python.outputs.python-path }}'
-          tox --installpkg '${{ needs.prepare.outputs.wheel-distribution }}'
-          -- -rFEx --durations 10 --color yes  # pytest args
-      - name: Generate coverage report
-        run: pipx run coverage lcov -o coverage.lcov
-      - name: Upload partial coverage report
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Conda
+        shell: bash
+        run: |
+          conda install -y -c conda-forge mamba
+          mamba update -y -n base -c defaults conda
+
+      - name: Configure Conda
+        run: |
+          conda config --set always_yes yes --set changeps1 no
+          conda update -q conda
+          conda info -a
+
+      - name: Install Dependencies
+        run: |
+          conda create -n testenv --yes python=${{ matrix.python-version }} pip pytest coverage
+          conda activate testenv
+          pip install conda-build conda-forge-tools
+          pip install -e .
+
+      - name: Build Package
+        run: |
+          conda build --output-folder dist .
+          ls -R dist/
+
+      - name: Install Built Package
+        run: |
+          conda create -n testenv --yes --file dist/*.tar.bz2
+          conda activate testenv
+
+      - name: Run Tests
+        env:
+          PYTHONPATH: $PYTHONPATH:${GITHUB_WORKSPACE}
+        run: |
+          pytest --cov=myproject --cov-report=xml:coverage.xml --junitxml=test-results.xml --cov-report=html
+
+      - name: Generate Coverage Report
+        run: coverage xml -o coverage.lcov
+
+      - name: Upload Coverage Report
         uses: coverallsapp/github-action@master
         with:
           path-to-lcov: coverage.lcov
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          flag-name: ${{ matrix.platform }} - py${{ matrix.python }}
+          flag-name: ${{ matrix.os }} - py${{ matrix.python-version }}
           parallel: true
+      - name: Upload results to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
 
-  finalize:
-    needs: test
+  finalize-coverage:
+    needs: build-and-test
     runs-on: ubuntu-latest
     steps:
-      - name: Finalize coverage report
+      - name: Finalize Coverage Report
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           parallel-finished: true
 
-  publish:
-    needs: finalize
-    if: ${{ github.event_name == 'push' && contains(github.ref, 'refs/tags/') }}
+  publish-to-conda-forge:
+    needs: build-and-test
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with: {python-version: "3.11"}
-      - name: Retrieve pre-built distribution files
-        uses: actions/download-artifact@v3
-        with: {name: python-distribution-files, path: dist/}
-      - name: Publish Package
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Conda
+        shell: bash
+        run: |
+          conda install -y -c conda-forge mamba
+          mamba update -y -n base -c defaults conda
+
+      - name: Configure Conda
+        run: |
+          conda config --set always_yes yes --set changeps1 no
+          conda update -q conda
+          conda info -a
+
+      - name: Install Dependencies
+        run: |
+          conda create -n testenv --yes python=3.11 pip conda-build conda-forge-tools anaconda-client
+          conda activate testenv
+
+      - name: Build Package
+        run: |
+          conda build --output-folder dist .
+          ls -R dist/
+
+      - name: Upload Package to Anaconda
         env:
-          # TODO: Set your PYPI_TOKEN as a secret using GitHub UI
-          # - https://pypi.org/help/#apitoken
-          # - https://docs.github.com/en/actions/security-guides/encrypted-secrets
-          TWINE_REPOSITORY: pypi
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-        run: pipx run tox -e publish
+          ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
+        run: |
+          anaconda login --token $ANACONDA_API_TOKEN
+          anaconda upload --user conda-forge --label main --skip-existing dist/*.tar.bz2

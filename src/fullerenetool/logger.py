@@ -2,11 +2,15 @@ import logging
 from typing import Optional
 
 
+class _LoggerLevelController:
+    _global_level = logging.INFO
+
+
 def setup_logger(
     identifier: str,
     console: bool = True,
     file: Optional[str] = None,
-    default_level=logging.DEBUG,
+    default_level=None,
 ) -> logging.Logger:
     """Sets up a logger with the given identifier.
 
@@ -22,17 +26,29 @@ def setup_logger(
     """
     # create logger named `identifier`
     logger = logging.getLogger(identifier)
-    logger.setLevel(default_level)
+    logger.setLevel(
+        default_level if default_level else _LoggerLevelController._global_level
+    )
 
     if file:
         file_handler = logging.FileHandler(file)
-        file_handler.setLevel(default_level)
+        file_handler.setLevel(
+            default_level if default_level else _LoggerLevelController._global_level
+        )
     if console:
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(default_level)
+        console_handler.setLevel(
+            default_level if default_level else _LoggerLevelController._global_level
+        )
 
     formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        "%(asctime)s - "
+        "%(processName)s - "
+        "%(threadName)s - "
+        "%(filename)s:%(lineno)d - "
+        "%(name)s - "
+        "%(levelname)s - "
+        "%(message)s"
     )
 
     if file:

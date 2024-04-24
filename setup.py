@@ -7,12 +7,13 @@
     Learn more under: https://pyscaffold.org/
 """
 
-from Cython.Build import cythonize
-from setuptools import Extension, setup
+from setuptools import setup
 
 if __name__ == "__main__":
     try:
         import numpy
+        from Cython.Build import cythonize
+        from setuptools import Extension
 
         extensions = [  # *find_pyx()
             Extension(
@@ -27,8 +28,21 @@ if __name__ == "__main__":
         setup(
             use_scm_version={"version_scheme": "no-guess-dev"},
             ext_modules=cythonize(extensions, language_level=3),
-            # include_dirs=[numpy.get_include()],
+            include_dirs=[numpy.get_include()],
             # packages=find_packages()
+        )
+    except ImportError:
+        install_command = "pip install Cython"
+        install_command_with_conda = "conda install cython"
+        message = (
+            "\n\nCython is required to build the project, "
+            "\nplease install it with:\n"
+            f"   {install_command}\n\n"
+            "or:\n"
+            f"   {install_command_with_conda}\n\n"
+        )
+        setup(
+            use_scm_version={"version_scheme": "no-guess-dev"},
         )
     except:  # noqa
         print(

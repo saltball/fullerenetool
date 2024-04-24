@@ -7,4 +7,13 @@
     - https://docs.pytest.org/en/stable/writing_plugins.html
 """
 
+import logging
+
 # import pytest
+import os
+from pathlib import Path
+
+from fullerenetool.logger import _LoggerLevelController
+
+_LoggerLevelController._global_level = logging.DEBUG
+os.chdir(Path(__file__).parent)
