@@ -23,7 +23,7 @@ def planarity_graph_draw(
 
     Parameters
     ----------
-    cage: FullereneCage
+    cage: Atoms
         A planaritable graph of fullerene family.
     sphere_ratio, parr_ratio:float
         ratio to control graph deformation between projection of platform

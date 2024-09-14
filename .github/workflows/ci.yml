@@ -43,11 +43,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install Conda
-        shell: bash
-        run: |
-          conda install -y -c conda-forge mamba
-          mamba update -y -n base -c defaults conda
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-activate-base: true
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
 
       - name: Configure Conda
         run: |
@@ -57,10 +57,8 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          conda create -n testenv --yes python=${{ matrix.python-version }} pip pytest coverage
-          conda activate testenv
-          pip install conda-build conda-forge-tools
-          pip install -e .
+          conda install --yes pip pytest coverage
+          conda install conda-build
 
       - name: Build Package
         run: |
@@ -70,7 +68,6 @@ jobs:
       - name: Install Built Package
         run: |
           conda create -n testenv --yes --file dist/*.tar.bz2
-          conda activate testenv
 
       - name: Run Tests
         env:
@@ -111,16 +108,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: conda-incubator/setup-miniconda@v3
         with:
-          python-version: "3.11"
-
-      - name: Install Conda
-        shell: bash
-        run: |
-          conda install -y -c conda-forge mamba
-          mamba update -y -n base -c defaults conda
+          auto-activate-base: true
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
 
       - name: Configure Conda
         run: |
@@ -130,8 +122,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          conda create -n testenv --yes python=3.11 pip conda-build conda-forge-tools anaconda-client
-          conda activate testenv
+          conda install pip conda-build conda-forge-tools anaconda-client
 
       - name: Build Package
         run: |

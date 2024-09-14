@@ -32,15 +32,14 @@ jobs:
       - name: Setup tox
         run: |
           python -m pip install --upgrade pip
-          pip install tox
+          pip install sphinx sphinx_rtd_theme
       - name: Checkout
         uses: actions/checkout@v3
       - name: Setup Pages
         uses: actions/configure-pages@v3
       - name: Build docs
         run: |
-          pip install .
-          tox -e docs
+          make html -C docs
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v1
         with:
