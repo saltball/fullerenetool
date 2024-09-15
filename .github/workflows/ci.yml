@@ -135,3 +135,6 @@ jobs:
         run: |
           anaconda login --token $ANACONDA_API_TOKEN
           anaconda upload --user conda-forge --label main --skip-existing dist/*.tar.bz2
+  publish-docs:
+    needs: build-and-test
+    uses: ./.github/workflows/docs.yaml
