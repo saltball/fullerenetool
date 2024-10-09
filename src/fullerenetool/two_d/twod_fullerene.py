@@ -1,6 +1,6 @@
-from fullerenetool.fullerene import BaseFullerene
+from fullerenetool.fullerene import BaseAbstartFullerene
 
 
-class TwoDFullerene(BaseFullerene):
+class TwoDFullerene(BaseAbstartFullerene):
     def __init__(self):
         pass

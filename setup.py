@@ -44,6 +44,7 @@ if __name__ == "__main__":
         setup(
             use_scm_version={"version_scheme": "no-guess-dev"},
         )
+        raise
     except:  # noqa
         print(
             "\n\nAn error occurred while building the project, "

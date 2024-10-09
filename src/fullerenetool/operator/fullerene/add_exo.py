@@ -134,7 +134,9 @@ def add_out_of_cage(
             )
     else:
         if addons_vec is not None:
-            logger.info("addons_vec of one atom addons is skipped.")
+            logger.debug("addons_vec of one atom addons is skipped.")
+        else:
+            addons_pos = addons_pos or addons.positions[addons_index]
 
     # move the addons_pos
     if addons_pos is not None:
@@ -170,7 +172,8 @@ def add_out_of_cage(
     retry=retry_if_exception_type(AtomTooCloseError),
 )
 def _add_atom_and_check(atoms, addons, vec, center_point) -> ase.Atoms:
-    addons = _random_rotate_addons(addons, vec, center_point)
+    if len(addons) > 1:
+        addons = _random_rotate_addons(addons, vec, center_point)
     try_atoms = ase.Atoms(atoms + addons)
     try_atoms = filter_ghost_atom(try_atoms)
     valid_molecule(try_atoms)
@@ -238,13 +241,16 @@ def get_cage_addon_pos(
     if bond_length is not None:
         pass
     else:
+        if addon_index is not None:
+            addon_index = addon_index
+        else:
+            if addons.get_atomic_numbers()[0] == 0:
+                addon_index = 1
+            else:
+                addon_index = 0
         bond_length = (
             covalent_radii[cage.get_atomic_numbers()[index]]
-            + covalent_radii[
-                addons.get_atomic_numbers()[
-                    addon_index if addon_index is not None else 0
-                ]
-            ]
+            + covalent_radii[addons.get_atomic_numbers()[addon_index]]
         )
     if return_vec:
         return cage.positions[index] + addon_direct * bond_length, addon_direct

@@ -3,9 +3,10 @@ from typing import List
 
 import ase
 import networkx as nx
+import numpy as np
 
 
-class BaseFullerene(ABC):
+class BaseAbstartFullerene(ABC):
     """Base class for fullerene objects.
 
     The fullerene instance has the following properties and methods:
@@ -47,3 +48,15 @@ class BaseFullerene(ABC):
     @abstractmethod
     def _check_atoms(self, atoms):
         raise NotImplementedError
+
+    @property
+    def positions(self) -> np.ndarray:
+        return self.atoms.positions
+
+    @property
+    def symbols(self) -> np.ndarray:
+        return self.atoms.symbols
+
+    @property
+    def natoms(self) -> int:
+        return self.atoms.natoms

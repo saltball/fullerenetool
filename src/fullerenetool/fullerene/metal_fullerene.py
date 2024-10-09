@@ -4,11 +4,11 @@ from typing import List
 import ase
 import networkx as nx
 
-from fullerenetool.fullerene import BaseFullerene, FullereneCage
+from fullerenetool.fullerene import BaseAbstartFullerene, FullereneCage
 from fullerenetool.operator.graph import get_graph_from_atoms
 
 
-class BaseMetalFullerene(BaseFullerene, ABC):
+class BaseMetalFullerene(BaseAbstartFullerene, ABC):
     @property
     @abstractmethod
     def metal_clusters(self) -> List[ase.Atoms]:

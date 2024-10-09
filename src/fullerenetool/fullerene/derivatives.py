@@ -1,43 +1,395 @@
-from typing import Iterable
+import logging
+import warnings
+from functools import cached_property
+from typing import Iterable, List, Optional
 
 import ase
-import deprecation
 import networkx as nx
+import numpy as np
 
-from fullerenetool import __version__
+from fullerenetool.fullerene._base_fullerene import BaseAbstartFullerene
+from fullerenetool.fullerene.cage import (
+    DEFAULT_MAX_STEPS,
+    BaseAbstactGraph,
+    CageGraph,
+    FullereneCage,
+)
+from fullerenetool.operator.calculator.bond_topo_builder import (
+    BondTopoBuilderCalculator,
+)
+from fullerenetool.operator.checker.molecule import filter_ghost_atom
+from fullerenetool.operator.fullerene.add_exo import add_out_of_cage, get_cage_addon_pos
 from fullerenetool.operator.graph import get_graph_from_atoms
 
 
-@deprecation.deprecated(
-    deprecated_in="0.0.1",
-    removed_in="0.0.2",
-    current_version=__version__,
-    details="Use the DerivativeFullerene class instead",
-)
-def get_cage_from_fullerene_derivative(atoms) -> ase.Atoms:
-    # we assume the largest connected carbon graph is the cage
-    carbon_atoms = ase.Atoms(atoms[atoms.get_atomic_numbers() == 6])
-    graph = get_graph_from_atoms(carbon_atoms, only_top3=False)
-    subgraphs = list(sorted(nx.connected_components(graph)))
-    return ase.Atoms(carbon_atoms[list(subgraphs[0])])
+class BaseDerivativeFullerene(BaseAbstartFullerene):
+    def __init__(self, atoms, cage: FullereneCage):
+        self._atoms = atoms
+        self._cage = cage
+        self.derivatives = self._get_derivatives()
+        self.cage_graph = self._cage.graph
+        self.cage_atom_index = []
+        for atom in self._atoms:
+            if atom in self._cage.atoms:
+                self.cage_atom_index.append(atom.index)
+        self.derivative_atom_index = [
+            index
+            for index in range(len(self._atoms))
+            if index not in self.cage_atom_index
+        ]
+        if len(self.derivatives) == 0:
+            logging.warning("No derivatives found in the fullerene")
+
+    def _get_derivatives(self):
+        """Return the atoms not on the cage, which is considered as derivative atoms"""
+        derivatives = []
+        for atom in self._atoms:
+            if atom not in self._cage.atoms:
+                derivatives.append(atom)
+        return ase.Atoms(derivatives)
+
+    def get_total_graph(self):
+        return get_graph_from_atoms(self._atoms, only_top3=False)
+
+    def get_derivative_graph(self):
+        return get_graph_from_atoms(self.derivatives, only_top3=False)
+
+    def get_first_derivative_graph(self):
+        """Get the graph with atoms in the first neighboring of the derivative atoms
+
+        return type: networkx.Graph
+        """
+
+    @property
+    def cage(self) -> "FullereneCage":
+        return self._cage
+
+    @property
+    def cages(self) -> List["FullereneCage"]:
+        return [self._cage]
+
+    @property
+    def graph(self) -> CageGraph:
+        return self.get_total_graph()
+
+    def _check_atoms(self, atoms):
+        pass
+
+    def __str__(self):
+        return "BaseDerivativeFullerene({}):Cage({}),Dev({})".format(
+            self.atoms.get_chemical_formula(),
+            self._cage.atoms.get_chemical_formula(),
+            self.derivatives.get_chemical_formula(),
+        )
+
+    @classmethod
+    def from_cage(
+        cls,
+        cage: FullereneCage,
+        addons: ase.Atoms,
+        addon_to: int,
+        addon_bond_length=None,
+    ):
+        """Generate a derivative fullerene from a cage and addons
+
+        Args:
+            cage (FullereneCage): The cage.
+            addons (ase.Atoms): The addons.
+            addon_to (int): The index of the atom to add the addons.
+            addon_bond_length (float, optional):
+                The bond length between the addon and the atom. Defaults to None.
+
+        Returns:
+            cls: The derivative fullerene.
+        """
+        addons_pos, addon_vec = get_cage_addon_pos(
+            cage.atoms,
+            addon_to,
+            addons,
+            bond_length=addon_bond_length,
+            return_vec=True,
+        )
+
+        return cls(
+            atoms=add_out_of_cage(
+                cage.atoms,
+                addons,
+                addons_pos=addons_pos,
+                addons_vec=addon_vec,
+            ),
+            cage=cage,
+        )
 
 
-@deprecation.deprecated(
-    deprecated_in="0.0.1",
-    removed_in="0.0.2",
-    current_version=__version__,
-    details="Use the DerivativeFullerene class instead",
-)
-def addons_of_fullerene_derivative(atoms) -> Iterable[ase.Atoms]:
-    _non_carbon_atoms = ase.Atoms(atoms[atoms.get_atomic_numbers() != 6])
-    graph = get_graph_from_atoms(_non_carbon_atoms, only_top3=False)
-    subgraphs = list(sorted(nx.connected_components(graph)))
-    for subgraph in subgraphs:
-        yield ase.Atoms(atoms[list(subgraph)])
+class DerivativeGroup:
+    def __init__(
+        self,
+        atoms: ase.Atoms,
+        graph: nx.Graph,
+        bond_length: float = None,
+        addon_atom_idx: Optional[int] = None,
+        addtofullerene=True,
+    ):
+        adj_matrix = nx.adjacency_matrix(graph).todense()
+        if addon_atom_idx is not None:  # addon_atom_idx offered, addon site is signed
+            if atoms[addon_atom_idx].symbol != "X":
+                raise ValueError(
+                    "The addon atom is not a pseudo atom, but use addon atom index."
+                )
+        else:
+            if "X" in atoms.get_chemical_symbols():
+                addon_atom_idx = np.where(
+                    np.array(atoms.get_chemical_symbols()) == "X"
+                )[0][0]
+            else:
+                warnings.warn(
+                    "No addon atom is signed, use the first atom as the addon atom."
+                )
+                addon_atom_idx = 0
+                first_neighbor = adj_matrix[0].nonzero()[0][0]
+                bond_vec = atoms.positions[first_neighbor] - atoms.positions[0]
+                pesudo_pos = (
+                    -bond_vec / np.linalg.norm(bond_vec) * bond_length
+                    + atoms.positions[0]
+                )
+                atoms = ase.Atoms(
+                    "X" + atoms.symbols,
+                    [pesudo_pos, *atoms.positions],
+                )
+                new_adj_matrix = np.zeros(
+                    [adj_matrix.shape[0] + 1, adj_matrix.shape[1] + 1]
+                )
+                new_adj_matrix[1:, 1:] = adj_matrix
+                new_adj_matrix[0, 1] = 1
+                new_adj_matrix[1, 0] = 1
+                adj_matrix = new_adj_matrix
+                graph = nx.from_numpy_array(adj_matrix)
+
+        if atoms[addon_atom_idx].symbol == "X":
+            if adj_matrix[addon_atom_idx].nonzero()[0].sum() != 1:
+                raise ValueError(
+                    "The graph of the derivative group is not valid, "
+                    "addon site is connected to {} atoms.".format(
+                        adj_matrix[addon_atom_idx].nonzero()
+                    )
+                )
+            self.first_neighbor = adj_matrix[addon_atom_idx].nonzero()[0][0]
+            add_vec = (
+                atoms.positions[self.first_neighbor] - atoms.positions[addon_atom_idx]
+            )
+            self.add_vec = add_vec / np.linalg.norm(add_vec)
+        else:
+            raise RuntimeError(
+                "This case is not implemented yet that \
+                    the addon atom is not a pseudo atom."
+            )
+        self.addon_atom_idx = addon_atom_idx
+        self.atoms = atoms
+        self.graph = graph
+
+    def addto(
+        self, idx, fullerene: BaseAbstartFullerene, outside=True, check=True
+    ) -> BaseDerivativeFullerene:
+        # check whether the idx of the fullerene is a valid addon point
+        if idx not in fullerene.graph.nodes:
+            raise ValueError("The index {} is not a valid addon point.".format(idx))
+        if check:
+            if nx.adjacency_matrix(fullerene.graph).todense()[idx].sum() > 3:
+                raise ValueError(
+                    "The addon point {} is not a valid addon point, \
+                        which is connected to {} atoms.".format(
+                        idx, nx.adjacency_matrix(fullerene.graph).todense()[idx].sum()
+                    )
+                )
+        dev_pos, dev_vec = get_cage_addon_pos(
+            fullerene.atoms,
+            idx,
+            self.atoms,
+            self.addon_atom_idx,
+            None,
+        )
+        dev = add_out_of_cage(
+            fullerene.atoms,
+            filter_ghost_atom(self.atoms),
+            addons_pos=dev_pos,
+            addons_vec=dev_vec,
+            addons_index=self.addon_atom_idx,
+            addons_conn_index=self.first_neighbor,
+            shake_num=50,
+            check=True,
+        )
+        dev = ase.Atoms(dev[dev.get_atomic_numbers() != 0])
+        return BaseDerivativeFullerene(
+            atoms=dev,
+            cage=fullerene.cages[0],
+        )
 
 
-# class BaseDerivativeFullerene(BaseFullerene):
-#     def __init__(self, atoms, cage_graph: CageGraph):
-#         self._atoms = atoms
-#         self.cage_graph = cage_graph
-#         self.derivatives =
+class DerivativeFullereneGraph(BaseAbstactGraph):
+
+    def __init__(
+        self,
+        adjacency_matrix: np.ndarray,
+        cage_elements: Iterable[str],
+        addons: Iterable[DerivativeGroup],
+        **kwargs,
+    ):
+        if adjacency_matrix is None:
+            raise ValueError("The adjacency_matrix is required.")
+        self.adjacency_matrix = adjacency_matrix
+        addons_elements = [
+            filter_ghost_atom(addon.atoms).get_chemical_symbols() for addon in addons
+        ]
+        addons_elements = [
+            item
+            for sublist in addons_elements
+            for item in (sublist if isinstance(sublist, list) else [sublist])
+        ]  # flatten
+        self.node_elements = [*cage_elements, *addons_elements]
+        self._check_node_elements()
+        self.kwargs = kwargs
+        assert (
+            len(cage_elements) + len(addons_elements) == adjacency_matrix.shape[0]
+        ), "The number of elements must be equal to the number of nodes,\
+            got {} and {}+{}".format(
+            adjacency_matrix.shape[0],
+            len(cage_elements),
+            len(addons_elements),
+        )
+        self.cage_elements = cage_elements
+        self.addons_elements = addons_elements
+        self.addons = addons
+        self.cage_atom_index = range(len(cage_elements))
+        self.addon_atom_index = range(
+            len(cage_elements), len(cage_elements) + len(addons_elements)
+        )
+
+    @property
+    def addon_sites(self):
+        coord_nums = self.adjacency_matrix[self.cage_atom_index].sum(axis=1)
+        return np.where(coord_nums == 3)[0]
+
+    def __str__(self):
+        return "DerivativeFullereneGraph object with\
+            {} nodes and {} edges, node_zs: {}".format(
+            self.graph.number_of_nodes(),
+            self.graph.number_of_edges(),
+            self.node_elements,
+        )
+
+    @cached_property
+    def _circle_finder(self):
+        from fullerenetool.algorithm import dual_graph
+
+        return dual_graph.py_graph_circle_finder(
+            int(len(self.graph.edges)), np.array(self.graph.edges).astype(int).data
+        )
+
+    @property
+    def cage_graph(self):
+        return CageGraph(
+            self.adjacency_matrix[: len(self.cage_elements), : len(self.cage_elements)],
+            node_elements=self.cage_elements,
+        )
+
+    def generate_atoms_with_addons(
+        self,
+        algorithm="cagethenaddons",
+        init_pos=None,
+        traj=None,
+        max_steps=DEFAULT_MAX_STEPS,
+        use_gpu=False,
+        addto=True,
+        check=True,
+    ) -> ase.Atoms:
+        if algorithm == "cagethenaddons":
+            cage_ = self.cage_graph.generate_atoms(
+                elements=self.cage_elements,
+                algorithm=algorithm,
+                init_pos=(
+                    init_pos[: len(self.cage_elements)]
+                    if init_pos is not None
+                    else None
+                ),
+                traj=traj,
+                max_steps=max_steps,
+                use_gpu=use_gpu,
+            )
+            derivated_atoms = BaseDerivativeFullerene(
+                atoms=cage_,
+                cage=FullereneCage(atoms=cage_),
+            )
+            for derivation in self.addons:
+                derivated_atoms = derivation.addto(
+                    self.adjacency_matrix[
+                        len(derivated_atoms.atoms) + derivation.addon_atom_idx
+                    ].nonzero()[0][0],
+                    derivated_atoms,
+                    check=check,
+                )
+            from ase.optimize.lbfgs import LBFGS
+
+            calc = BondTopoBuilderCalculator(
+                topo=nx.adjacency_matrix(self.graph).todense(),
+                device="cuda" if use_gpu else "cpu",
+            )
+            atoms = ase.Atoms(
+                symbols=self.node_elements,
+                positions=derivated_atoms.positions,
+                calculator=calc,
+            )
+            opt = LBFGS(atoms, trajectory=traj)
+            opt.run(fmax=0.001, steps=max_steps)
+            return atoms
+        else:
+            raise NotImplementedError("Algorithm {} not implemented".format(algorithm))
+
+
+def addons_to_adj_mat(new_adj, addon_idx, cage_idx):
+    new_adj[addon_idx, cage_idx] = 1
+    new_adj[cage_idx, addon_idx] = 1
+
+
+def addons_to_fullerene(
+    addons_list,
+    addon_site_idx_list,
+    cage: FullereneCage,
+    cage_graph_adj: np.ndarray,
+    addon_bond_length=None,
+):
+    assert len(addons_list) == len(
+        addon_site_idx_list
+    ), "The number of addons must be equal to the number of addon_site_idx"
+    ADD_NUM = sum([len(addon.graph.nodes) - 1 for addon in addons_list])
+    origin_len = len(cage_graph_adj)
+    new_adj = np.zeros((origin_len + ADD_NUM, origin_len + ADD_NUM))
+    for i in range(origin_len):
+        for j in range(origin_len):
+            new_adj[i, j] = cage_graph_adj[i, j]
+
+    add_flag = origin_len
+    for idx, addto in enumerate(addon_site_idx_list):
+        addon_index = addons_list[idx].addon_atom_idx
+        addons_to_adj_mat(new_adj, add_flag + addon_index, addto)
+        for bond1, bond2 in addons_list[idx].graph.edges:
+            if addon_index in [bond1, bond2]:
+                continue
+            if bond1 > addon_index:
+                bond1 = bond1 - 1
+            if bond2 > addon_index:
+                bond2 = bond2 - 1
+            addons_to_adj_mat(new_adj, add_flag + bond1, add_flag + bond2)
+        add_flag = add_flag + len(addons_list[idx].graph.nodes) - 1
+
+    cl_graph = DerivativeFullereneGraph(
+        adjacency_matrix=new_adj,
+        cage_elements=cage.graph.node_elements,
+        addons=addons_list,
+    )
+    cl_mol = cl_graph.generate_atoms_with_addons(
+        algorithm="cagethenaddons",
+        init_pos=cage.atoms.positions,
+        max_steps=50,
+        check=False,
+    )
+    return cl_graph, cl_mol

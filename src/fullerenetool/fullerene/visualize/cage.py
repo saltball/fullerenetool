@@ -1,29 +1,20 @@
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
-from ase import Atoms
 
 
-def planarity_graph_draw(
-    cage: Atoms,
+def planarity_graph_pos(
+    cage,
     sphere_ratio: float = 0.8,
     parr_ratio: float = 0.2,
     projection_point: int = 0,
-    path=None,
-    pentage_color="orange",
-    pentage_alpha=0.5,
-    antialiased=True,
-    line_color="orange",
-    line_alpha=0.5,
-    atom_label=True,
-    ax=None,
 ):
     """
     Draw fullerene planarity graph combinating parrallel and hemi-sphere projection.
 
     Parameters
     ----------
-    cage: Atoms
+    cage: FullereneCage
         A planaritable graph of fullerene family.
     sphere_ratio, parr_ratio:float
         ratio to control graph deformation between projection of platform
@@ -35,10 +26,6 @@ def planarity_graph_draw(
         # TODO: Group Point method.
     path:save to file
         if set to None, no file will be saved.
-
-    Returns
-    -------
-
     """
     center_full = np.average(cage.positions, axis=0)  # molecular geom-center
     centered_pos = cage.positions - center_full
@@ -128,6 +115,52 @@ def planarity_graph_draw(
     project_axis_sp_r[:, :2] = np.einsum(
         "an,nm->am", mat_rotate, np.array([mx, my])
     ).transpose()
+    return project_axis_sp_r
+
+
+def planarity_graph_draw(
+    cage,
+    sphere_ratio: float = 0.8,
+    parr_ratio: float = 0.2,
+    projection_point: int = 0,
+    path=None,
+    pentage_color="orange",
+    pentage_alpha=0.5,
+    antialiased=True,
+    line_color="orange",
+    line_alpha=0.5,
+    atom_label=True,
+    ax=None,
+):
+    """
+    Draw fullerene planarity graph combinating parrallel and hemi-sphere projection.
+
+    Parameters
+    ----------
+    cage: FullereneCage
+        A planaritable graph of fullerene family.
+    sphere_ratio, parr_ratio:float
+        ratio to control graph deformation between projection of platform
+        and hemi-sphere.
+    projection_point:str
+        methods of choosing projection point
+        If set to None, it will use the geom-center of the first 6-member circle and
+        average distance away from fullerene center.
+        # TODO: Group Point method.
+    path:save to file
+        if set to None, no file will be saved.
+
+    Returns
+    -------
+
+    """
+    circles = cage.circle_vertex_list
+    project_axis_sp_r = planarity_graph_pos(
+        cage,
+        sphere_ratio=sphere_ratio,
+        parr_ratio=parr_ratio,
+        projection_point=projection_point,
+    )
 
     # draw figure
     if ax is None:

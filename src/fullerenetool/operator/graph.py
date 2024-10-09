@@ -12,7 +12,7 @@ def get_graph_from_atoms(atoms: ase.Atoms, only_top3=True) -> nx.Graph:
     Args:
         atoms (ase.Atoms): The atoms object to convert to a graph.
         only_top3 (bool, optional): If True, only the top 3 shortest distances are used.
-            Defaults to True for fullerene cages.
+            Defaults to True, which is useful for fullerenes.
 
     Returns:
         nx.Graph: The networkx graph object.
@@ -32,4 +32,35 @@ def get_graph_from_atoms(atoms: ase.Atoms, only_top3=True) -> nx.Graph:
             neighborSorted = np.argsort(neighborDis)
             adjacency_matrix[np.arange(len(atoms))[:, None], neighborSorted[:, 1:4]] = 1
     adjacency_matrix = np.array(adjacency_matrix)
-    return nx.from_numpy_array(adjacency_matrix, create_using=nx.Graph)
+    graph = nx.from_numpy_array(adjacency_matrix, create_using=nx.Graph)
+    for node, z in zip(graph.nodes, atoms.get_atomic_numbers()):
+        graph.nodes[node]["z"] = z
+    return graph
+
+
+def nx_to_nauty(G, include_z_labels=True):
+    """
+    将 networkx 图转换为 pynauty 图
+    """
+    # 将 networkx 图转换为 pynauty 图
+    import pynauty as pn
+
+    adj_dict = {}
+    for u, v in G.edges():
+        adj_dict[u] = adj_dict.get(u, []) + [v]
+    if include_z_labels:
+        unique_elements, inverse_indices = np.unique(
+            list(nx.get_node_attributes(G, "z").values()), return_inverse=True
+        )
+        index_dict = [
+            set(np.nonzero(inverse_indices == i)[0])
+            for i, _ in enumerate(unique_elements)
+        ]
+    nauty_graph = pn.Graph(
+        number_of_vertices=G.number_of_nodes(),
+        directed=False,
+        adjacency_dict=adj_dict,
+        vertex_coloring=index_dict if include_z_labels else [],
+    )
+
+    return nauty_graph

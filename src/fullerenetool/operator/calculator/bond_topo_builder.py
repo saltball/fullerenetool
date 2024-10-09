@@ -6,7 +6,7 @@ from ase.calculators.calculator import Calculator, all_changes
 from fullerenetool.constant import covalent_bond
 
 
-class BondCalculator(Calculator):
+class BondTopoBuilderCalculator(Calculator):
     name = "bond"
     implemented_properties = ["energy", "free_energy", "forces", "energies"]
     covalent_bond = covalent_bond
@@ -22,8 +22,9 @@ class BondCalculator(Calculator):
     ):
         """
         params:
-            topo: nx.adjacency_matrix(nx.Graph).todense() of the molecule
-            device: 'cpu' or 'cuda' for torch.device()
+            kwargs:
+                topo: nx.adjacency_matrix(nx.Graph).todense() of the molecule
+                device: 'cpu' or 'cuda' for torch.device()
 
         """
         super().__init__(**kwargs)
@@ -68,7 +69,7 @@ class BondCalculator(Calculator):
         connect_mat_cols = torch.tensor(
             connect_mat_cols, dtype=torch.long, device=device
         )
-        connect_mask = torch.LongTensor(connect_mat, device=device)
+        connect_mask = torch.tensor(connect_mat, dtype=torch.long, device=device)
 
         # 构建共价键长参数矩阵
         convalent_bond_mat = torch.zeros_like(distance_mat)
@@ -87,7 +88,7 @@ class BondCalculator(Calculator):
         # 计算键能
         energy = (a0 * d_dis.pow(2)).sum()
         # 计算排斥能
-        energy += ((0.1 / (distance_mat + 0.01) ** 2) * (1 - connect_mask)).sum()
+        energy += ((0.01 / (distance_mat + 0.01) ** 2) * (1 - connect_mask)).sum()
 
         energy.backward()
         forces = -positions.grad
