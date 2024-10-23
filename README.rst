@@ -70,6 +70,23 @@ One needs to install `cython` before development, a simple command to install is
 and one should use `setup.py` to build and install the package for development, a simple command to build is::
 
     python setup.py install build_ext --inplace
+    pip install -e .
+
+to install the package for development. You may use::
+
+    pip uninstall fullerenetool -y && python setup.py install build_ext
+
+to install the package to your environment directory.
+
+You may need to install boost, numpy before installing the package, a simple command to install is::
+
+    conda install numpy boost
+
+We recommend to use dockerfile to build the package, a simple command to build is::
+
+    docker build -t fullerenetool .
+
+And the package can be run in the container.
 
 Note
 ====

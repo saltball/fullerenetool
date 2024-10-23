@@ -14,6 +14,7 @@ from fullerenetool.fullerene.cage import (
     CageGraph,
     FullereneCage,
 )
+from fullerenetool.logger import logger
 from fullerenetool.operator.calculator.bond_topo_builder import (
     BondTopoBuilderCalculator,
 )
@@ -224,6 +225,10 @@ class DerivativeGroup:
             cage=fullerene.cages[0],
         )
 
+    @property
+    def name(self):
+        return "{}".format(filter_ghost_atom(self.atoms).get_chemical_formula())
+
 
 class DerivativeFullereneGraph(BaseAbstactGraph):
 
@@ -298,23 +303,62 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
         init_pos=None,
         traj=None,
         max_steps=DEFAULT_MAX_STEPS,
+        b2n2_steps=50,
         use_gpu=False,
-        addto=True,
+        add_outside=True,
         check=True,
     ) -> ase.Atoms:
+        if init_pos is not None and len(init_pos) < len(self.node_elements):
+            # the initial positions is not compelete provided for the addons
+            logger.info(
+                "The initial positions is less than the number of nodes:"
+                "{} < {}".format(len(init_pos), len(self.node_elements))
+            )
+            new_init_pos = np.zeros([len(self.node_elements), 3])
+            new_init_pos[: len(init_pos), :] = init_pos
+            if add_outside:
+                inside_center = init_pos[: len(self.cage_elements)].mean(0)
+                for add_pos_index in self.addon_atom_index:
+                    addon_index = self.adjacency_matrix[add_pos_index].nonzero()[0]
+                    if addon_index[0].size != 1:
+                        raise ValueError(
+                            "Cannot add the addon because the connection is not 1, "
+                            + "got {}".format(addon_index[0].size)
+                        )
+                    addon_pos = init_pos[addon_index]
+                    new_init_pos[add_pos_index] = (
+                        inside_center + (addon_pos - inside_center) * 1.5
+                    )
+
+            else:
+                raise NotImplementedError(
+                    "Add indise not implemented yet, "
+                    "please provide the positions for all atoms."
+                )
+        elif init_pos is not None and len(init_pos) > len(self.node_elements):
+            warnings.warn(
+                "The initial positions is longer than the number of nodes:"
+                "{} > {}".format(len(init_pos), len(self.node_elements))
+            )
+            new_init_pos = init_pos[: len(self.cage_elements)]
+        else:  # None or complete
+            new_init_pos = init_pos
         if algorithm == "cagethenaddons":
+            # cage
             cage_ = self.cage_graph.generate_atoms(
                 elements=self.cage_elements,
-                algorithm=algorithm,
+                algorithm="b2n2thenb2",
                 init_pos=(
-                    init_pos[: len(self.cage_elements)]
-                    if init_pos is not None
+                    new_init_pos[: len(self.cage_elements), :]
+                    if new_init_pos is not None
                     else None
                 ),
-                traj=traj,
+                traj="cage_" + traj if traj else None,
+                b2n2_steps=b2n2_steps,
                 max_steps=max_steps,
                 use_gpu=use_gpu,
             )
+            # add addons
             derivated_atoms = BaseDerivativeFullerene(
                 atoms=cage_,
                 cage=FullereneCage(atoms=cage_),
@@ -338,7 +382,10 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
                 positions=derivated_atoms.positions,
                 calculator=calc,
             )
-            opt = LBFGS(atoms, trajectory=traj)
+            opt = LBFGS(
+                atoms,
+                trajectory="addons_" + traj if traj else None,
+            )
             opt.run(fmax=0.001, steps=max_steps)
             return atoms
         else:
@@ -356,6 +403,7 @@ def addons_to_fullerene(
     cage: FullereneCage,
     cage_graph_adj: np.ndarray,
     addon_bond_length=None,
+    traj=None,
 ):
     assert len(addons_list) == len(
         addon_site_idx_list
@@ -381,15 +429,16 @@ def addons_to_fullerene(
             addons_to_adj_mat(new_adj, add_flag + bond1, add_flag + bond2)
         add_flag = add_flag + len(addons_list[idx].graph.nodes) - 1
 
-    cl_graph = DerivativeFullereneGraph(
+    dev_graph = DerivativeFullereneGraph(
         adjacency_matrix=new_adj,
         cage_elements=cage.graph.node_elements,
         addons=addons_list,
     )
-    cl_mol = cl_graph.generate_atoms_with_addons(
+    dev_mol = dev_graph.generate_atoms_with_addons(
         algorithm="cagethenaddons",
         init_pos=cage.atoms.positions,
         max_steps=50,
         check=False,
+        traj="cagethenaddons_" + traj if traj else None,
     )
-    return cl_graph, cl_mol
+    return dev_graph, dev_mol

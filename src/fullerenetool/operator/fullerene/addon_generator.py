@@ -1,4 +1,12 @@
-import pynauty as pn
+try:
+    import pynauty as pn
+except ImportError:
+    pn = None
+    Warning(
+        "pynauty not installed, cannot use addons_to_fullerene, ",
+        "if you're using dflow, ignore this warning ",
+        "if you install pynauty in your runtime environment.",
+    )
 
 from fullerenetool.fullerene.derivatives import DerivativeFullereneGraph
 from fullerenetool.operator.graph import nx_to_nauty

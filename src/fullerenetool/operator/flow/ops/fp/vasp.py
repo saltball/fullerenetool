@@ -6,6 +6,8 @@ from dflow.python import OP, Artifact, BigParameter, upload_packages
 from dflow.utils import run_command as dflow_run_command
 from dflow.utils import set_directory
 
+from fullerenetool.logger import logger
+
 upload_packages += fpop.__path__
 
 
@@ -81,7 +83,7 @@ NSW = 0
     if magmom is not None:
         vasp_input_str += "MAGMOM = " + " ".join([str(m) for m in magmom]) + "\n"
     Path(input_path).write_text(vasp_input_str)
-    print("vasp input file is written to {}".format(input_path))
+    logger.info("vasp input file is written to {}".format(input_path))
     vasp_inputs = VaspInputs(
         kspacing,
         Path(input_path),

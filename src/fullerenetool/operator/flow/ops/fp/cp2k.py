@@ -6,6 +6,8 @@ from dflow.python import OP, Artifact, BigParameter, upload_packages
 from dflow.utils import run_command as dflow_run_command
 from dflow.utils import set_directory
 
+from fullerenetool.logger import logger
+
 
 class Cp2kInputs:
     def __init__(self, inp_file: str):
@@ -129,7 +131,7 @@ def runCp2KCalculation(
         print_oe=True,
         raise_error=False,
     )
-    print(err)
+    logger.error(err)
     return {
         "output_dir": Path(input_dir),
         "log": Path("log"),

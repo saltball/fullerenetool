@@ -2,7 +2,7 @@
 FROM nvidia/cuda:12.5.0-base-ubuntu22.04 AS build
 
 ARG MINIFORGE_NAME=Miniforge3
-ARG MINIFORGE_VERSION=24.3.0-0
+ARG MINIFORGE_VERSION=24.9.0-0
 
 ENV CONDA_DIR=/opt/conda
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
@@ -46,7 +46,7 @@ RUN python setup.py bdist_wheel
 FROM nvidia/cuda:12.5.0-base-ubuntu22.04
 
 ARG MINIFORGE_NAME=Miniforge3
-ARG MINIFORGE_VERSION=24.3.0-0
+ARG MINIFORGE_VERSION=24.9.0-0
 
 ENV CONDA_DIR=/opt/conda
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
@@ -78,6 +78,7 @@ RUN mamba install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia && \
     mamba install deprecation pynauty networkx tenacity pymace -c conda-forge && \
     mamba clean -ai -y && \
     mamba init
+RUN python -c "from mace.calculators import mace_anicc, mace_mp, mace_off; mace_mp('small');mace_mp('medium');mace_mp('large')"
 
 # 复制构建阶段生成的 wheel 文件并安装
 COPY --from=build dist/*.whl ./

@@ -28,6 +28,7 @@ class BondTopoBuilderCalculator(Calculator):
 
         """
         super().__init__(**kwargs)
+        self.no_repulsion = kwargs.get("no_repulsion", False)  # use repulsion
         self.topo = kwargs["topo"]
         self.device = (
             torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -88,7 +89,10 @@ class BondTopoBuilderCalculator(Calculator):
         # 计算键能
         energy = (a0 * d_dis.pow(2)).sum()
         # 计算排斥能
-        energy += ((0.01 / (distance_mat + 0.01) ** 2) * (1 - connect_mask)).sum()
+        if self.no_repulsion:
+            pass
+        else:
+            energy += ((0.01 / (distance_mat + 0.01) ** 2) * (1 - connect_mask)).sum()
 
         energy.backward()
         forces = -positions.grad

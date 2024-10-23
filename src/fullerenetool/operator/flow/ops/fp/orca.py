@@ -152,6 +152,8 @@ def runOrcaCalculation(
     import os
     from pathlib import Path
 
+    from fullerenetool.logger import logger
+
     os.chdir(input_dir)
     time_log_path = Path(f"time_log.{job_name}")
     time_log_path.touch()
@@ -167,8 +169,8 @@ def runOrcaCalculation(
         interactive=True,
         raise_error=True,
     )
-    print("out:", out)
-    print("err:", err)
+    logger.info("out:{}".format(out))
+    logger.warning("err:{}".format(err))
     return {
         "output_dir": Path(input_dir),
         "log": Path("log"),
