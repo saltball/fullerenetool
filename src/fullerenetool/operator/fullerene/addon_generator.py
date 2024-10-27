@@ -65,7 +65,7 @@ def generate_addons_and_filter(
     Yields:
         _type_: _description_
     """
-    cage = fullerene_dev.cage_graph
+    cage = fullerene_dev
     candidate_sites = fullerene_dev.addon_sites
     candidate_pairs = [[] for _ in range(addon_num)]
     candidate_graphs = [[] for _ in range(addon_num)]
