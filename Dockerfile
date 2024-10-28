@@ -3,6 +3,7 @@ FROM nvidia/cuda:12.5.0-base-ubuntu22.04 AS build
 
 ARG MINIFORGE_NAME=Miniforge3
 ARG MINIFORGE_VERSION=24.9.0-0
+ARG PYTORCH_VERSION=*cuda*
 
 ENV CONDA_DIR=/opt/conda
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
@@ -30,9 +31,9 @@ RUN apt-get update > /dev/null && \
 COPY . .
 
 # 安装必要的 Python 包
-RUN mamba install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia && \
+RUN mamba install pytorch=*=${PYTORCH_VERSION} && \
     mamba install dpdata ase numpy scipy && \
-    mamba install pymatgen dargs cp2kdata -c conda-forge && \
+    mamba install pymatgen dargs cp2kdata && \
     mamba install cython setuptools setuptools_scm wheel boost && \
     mamba clean -ai -y && \
     mamba init

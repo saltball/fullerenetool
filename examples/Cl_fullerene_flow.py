@@ -263,6 +263,7 @@ def run(
     addon_step: int = 1,
     addon_bond_length: float = 1.4,
     group_size=5,
+    generate_addons_group_size=50,
     pick_first_n=0,
     gpu_machine_template_config=gpu_machine_template_config,
     simple_machine_template_config=simple_machine_template_config,
@@ -285,6 +286,7 @@ def run(
             simple_machine_template_config=simple_machine_template_config,
             gpu_machine_template_config=gpu_machine_template_config,
             group_size=group_size,
+            generate_addons_group_size=generate_addons_group_size,
             image=IMAGE,
         ),
         parameters={
@@ -345,11 +347,11 @@ if __name__ == "__main__":
         XCl,
         addon_start=0,
         start_idx_list=[[]],
-        group_size=100,
-        generate_addons_group_size=5,
+        group_size=1000,
+        generate_addons_group_size=10,
         addon_max=20,
         addon_step=1,
-        pick_first_n=50,
+        pick_first_n=100,
         # addon_bond_length=1.4
         gpu_machine_template_config=gpu_machine_template_config,
     )

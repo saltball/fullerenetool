@@ -289,6 +289,9 @@ def establish_parrel_generate_nonisomorphic_addon_steps(
             GetNonisomorphicAddons,
             image=image,
             **simple_machine_template_config,
+            envs={
+                "CUDA_VISIBLE_DEVICES": "''",  # for cpu only
+            },
         ),
         slices=Slices(
             input_parameter=["start_idx"],
