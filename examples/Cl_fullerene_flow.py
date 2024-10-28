@@ -92,7 +92,8 @@ def add_exo_steps(
     addon_max,
     simple_machine_template_config=simple_machine_template_config,
     gpu_machine_template_config=gpu_machine_template_config,
-    group_size=5,
+    group_size=100,
+    generate_addons_group_size=5,
     image: str = IMAGE,
 ):
     add_steps = Steps(
@@ -124,7 +125,7 @@ def add_exo_steps(
             gpu_machine_template_config=gpu_machine_template_config,
             group_size=group_size,
             image=image,
-            generate_addons_group_size=1,
+            generate_addons_group_size=5,
         ),
         parameters={
             "fulleren_init": add_steps.inputs.parameters["fulleren_init"],
@@ -345,6 +346,7 @@ if __name__ == "__main__":
         addon_start=0,
         start_idx_list=[[]],
         group_size=100,
+        generate_addons_group_size=5,
         addon_max=20,
         addon_step=1,
         pick_first_n=50,

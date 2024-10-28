@@ -288,7 +288,7 @@ def establish_parrel_generate_nonisomorphic_addon_steps(
         template=PythonOPTemplate(
             GetNonisomorphicAddons,
             image=image,
-            **gpu_machine_template_config,
+            **simple_machine_template_config,
         ),
         slices=Slices(
             input_parameter=["start_idx"],

@@ -2,6 +2,7 @@ import ase
 import networkx as nx
 import numpy as np
 import pynauty as pn
+import torch
 from ase.build import molecule
 
 from fullerenetool.fullerene.derivatives import (
@@ -12,6 +13,9 @@ from fullerenetool.fullerene.derivatives import (
 )
 from fullerenetool.operator.fullerene.addon_generator import generate_addons_and_filter
 from fullerenetool.operator.graph import nx_to_nauty
+
+print("CUDA:", torch.cuda.is_available())
+
 
 C60 = molecule("C60")
 
