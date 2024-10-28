@@ -51,8 +51,8 @@ fulleren_init = FullereneCage(C60[np.array(canon_index)])
 print(pn.canon_label(nx_to_nauty(fulleren_init.graph.graph, include_z_labels=False)))
 
 addon = XCl
-addon_start = 2
-start_idx = [0, 17]
+addon_start = 1
+start_idx = [1]
 add_num = 1
 
 dev_groups = [addon] * addon_start

@@ -67,6 +67,7 @@ def generate_addons_and_filter(
     """
     cage = fullerene_dev
     candidate_sites = fullerene_dev.addon_sites
+    z_labels = "".join([str(i) for i in cage.node_elements])
     candidate_pairs = [[] for _ in range(addon_num)]
     candidate_graphs = [[] for _ in range(addon_num)]
     candidate_graph_certificate = [
@@ -88,7 +89,7 @@ def generate_addons_and_filter(
             tmp_pn_graph = pn.canon_graph(
                 nx_to_nauty(tmp_cage_graph, include_z_labels=False)
             )
-            certif = pn.certificate(tmp_pn_graph)
+            certif = pn.certificate(tmp_pn_graph) + z_labels.encode()
 
             if certif in candidate_graph_certificate[site_num]:
                 isomorphic_flag = True
@@ -97,7 +98,7 @@ def generate_addons_and_filter(
                 candidate_graphs[site_num].append(tmp_cage_graph)
                 candidate_graph_certificate[site_num].append(certif)
                 if yield_flag:
-                    yield isites, tmp_cage_graph
+                    yield isites, tmp_cage_graph, certif
                 tmp_candidate_pairs.append([*isites])
         candidate_pairs[site_num] = tmp_candidate_pairs  # 更新剔除重复后的候选
         # 更新新的对
@@ -108,4 +109,4 @@ def generate_addons_and_filter(
                     tmp_addons.append([*candidate_pair, isite])
         if site_num < addon_num - 1:  # 更新新的候选遍历节点层级
             candidate_pairs[site_num + 1] = tmp_addons
-    return candidate_pairs, candidate_graphs
+    return candidate_pairs, candidate_graphs, candidate_graph_certificate

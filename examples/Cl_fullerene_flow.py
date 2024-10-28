@@ -25,7 +25,7 @@ from dflow import (
     argo_sequence,
     set_config,
 )
-from dflow.python import PythonOPTemplate, Slices, upload_packages
+from dflow.python import OP, PythonOPTemplate, Slices, upload_packages
 
 import fullerenetool
 from fullerenetool.fullerene.cage import FullereneCage
@@ -76,7 +76,20 @@ gpu_machine_template_config = {
 IMAGE = "registry-vpc.cn-heyuan.aliyuncs.com/xjtu-icp/fullerenetool:2024-10-24-00-38-18"
 
 
+@OP.function
+def schedule_next(
+    addon_start: int,
+    addon_max: int,
+    add_num: int,
+) -> {"addon_next": int, "finished": bool}:
+    return {
+        "addon_next": addon_start + add_num,
+        "finished": addon_start + add_num >= addon_max,
+    }
+
+
 def add_exo_steps(
+    addon_max,
     simple_machine_template_config=simple_machine_template_config,
     gpu_machine_template_config=gpu_machine_template_config,
     group_size=5,
@@ -91,6 +104,7 @@ def add_exo_steps(
                 "addon_start": InputParameter(),
                 "start_idx_list": InputParameter(),
                 "add_num": InputParameter(),
+                "pick_first_n": InputParameter(),
             }
         ),
         outputs=Outputs(
@@ -186,7 +200,10 @@ def add_exo_steps(
                 "addons_index_list"
             ],
             "energy_list": gather_energies.outputs.parameters["energy_list"],
-            "pick_first_n": 0,
+            "addon_pos_index_list": candidategraph_list_step.outputs.parameters[
+                "addon_pos_index_list"
+            ],
+            "pick_first_n": add_steps.inputs.parameters["pick_first_n"],
         },
         artifacts={
             "calculated_atoms_xyz": gather_energies.outputs.artifacts[
@@ -195,6 +212,32 @@ def add_exo_steps(
         },
     )
     add_steps.add(sort)
+
+    schedule_next_step = Step(
+        name="schedule-next",
+        template=PythonOPTemplate(schedule_next, image=image),
+        parameters={
+            "addon_start": add_steps.inputs.parameters["addon_start"],
+            "addon_max": addon_max,
+            "add_num": add_steps.inputs.parameters["add_num"],
+        },
+    )
+    add_steps.add(schedule_next_step)
+
+    next_addon_steps = Step(
+        name="next-addon-steps",
+        template=add_steps,
+        parameters={
+            "fulleren_init": add_steps.inputs.parameters["fulleren_init"],
+            "addon": add_steps.inputs.parameters["addon"],
+            "addon_start": schedule_next_step.outputs.parameters["addon_next"],
+            "start_idx_list": sort.outputs.parameters["addon_pos_index_list"],
+            "add_num": add_steps.inputs.parameters["add_num"],
+            "pick_first_n": add_steps.inputs.parameters["pick_first_n"],
+        },
+        when="%s == false" % (schedule_next_step.outputs.parameters["finished"]),
+    )
+    add_steps.add(next_addon_steps)
 
     add_steps.outputs.parameters["addons_index_list"].value_from_parameter = (
         sort.outputs.parameters["addons_index_list"]
@@ -219,6 +262,7 @@ def run(
     addon_step: int = 1,
     addon_bond_length: float = 1.4,
     group_size=5,
+    pick_first_n=0,
     gpu_machine_template_config=gpu_machine_template_config,
     simple_machine_template_config=simple_machine_template_config,
 ):
@@ -231,11 +275,12 @@ def run(
         addon_bond_length: bond length of addon
     """
     wf = Workflow(
-        name="fullerene-dev-" + "cl",
+        name="fullerene-dev",
     )
     addon_step = Step(
         name="addon-step",
         template=add_exo_steps(
+            addon_max=addon_max,
             simple_machine_template_config=simple_machine_template_config,
             gpu_machine_template_config=gpu_machine_template_config,
             group_size=group_size,
@@ -247,6 +292,7 @@ def run(
             "addon_start": addon_start,
             "start_idx_list": start_idx_list,
             "add_num": addon_step,
+            "pick_first_n": pick_first_n,
         },
     )
     wf.add(addon_step)
@@ -255,12 +301,15 @@ def run(
 
 
 if __name__ == "__main__":
+    import pynauty as pn
     from ase.build import molecule
+
+    from fullerenetool.operator.graph import nx_to_nauty
 
     C60 = molecule("C60")
     XCl = DerivativeGroup(
         atoms=ase.Atoms(
-            "XF",
+            "XCl",
             [
                 [0.1, 0.1, -0.2],
                 [0, 0, 0],
@@ -283,14 +332,22 @@ if __name__ == "__main__":
         ),
         addon_atom_idx=0,
     )
+    fulleren_init = FullereneCage(C60)
+
+    canon_index = pn.canon_label(
+        nx_to_nauty(fulleren_init.graph.graph, include_z_labels=False)
+    )
+
+    fulleren_init = FullereneCage(C60[np.array(canon_index)])
     run(
-        FullereneCage(C60),
+        fulleren_init,
         XCl,
-        addon_start=2,
-        start_idx_list=[[0, 8], [0, 17]],
-        group_size=30,
-        # addon_max=40,
+        addon_start=0,
+        start_idx_list=[[]],
+        group_size=100,
+        addon_max=20,
         addon_step=1,
+        pick_first_n=50,
         # addon_bond_length=1.4
         gpu_machine_template_config=gpu_machine_template_config,
     )

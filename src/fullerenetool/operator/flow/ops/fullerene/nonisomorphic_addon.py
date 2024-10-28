@@ -45,7 +45,7 @@ class GetNonisomorphicAddons(OP):
                 "fulleren_init": BigParameter(FullereneCage),
                 "addon": BigParameter(DerivativeGroup),
                 "addon_start": int,
-                "start_idx": List[int],
+                "start_idx": List,
                 "add_num": int,
             }
         )
@@ -57,6 +57,7 @@ class GetNonisomorphicAddons(OP):
                 "candidategraph_list_file": Artifact(Path),
                 "candidategraph_name_list_file": Artifact(Path),
                 "addon_pos_index_list_file": Artifact(Path),
+                "certif_string_file": Artifact(Path),
                 "atoms_file_list": Artifact(List[Path]),
                 "task_num": int,
             }
@@ -98,6 +99,7 @@ class GetNonisomorphicAddons(OP):
         candidategraph_name_list = []
         atoms_list = []
         addon_pos_index_list = []
+        certif_string_list = []
         Path("atoms_file_list_{}".format(identity_string)).mkdir(exist_ok=True)
 
         for idx, candidategraph in enumerate(
@@ -138,6 +140,7 @@ class GetNonisomorphicAddons(OP):
             write_extxyz(atoms_file_name.open("w"), dev_fullerene)
             atoms_list.append(atoms_file_name)
             addon_pos_index_list.append(addon_pos_index)
+            certif_string_list.append(candidategraph[2])
 
         Path(f"candidategraph_list_file_{identity_string}").write_text(
             "\n".join(
@@ -151,6 +154,9 @@ class GetNonisomorphicAddons(OP):
         Path(f"addon_pos_index_list_file_{identity_string}").write_text(
             jsonpickle.dumps(addon_pos_index_list)
         )
+        Path(f"certif_string_file_{identity_string}").write_text(
+            jsonpickle.dumps(certif_string_list)
+        )
 
         op_out = OPIO(
             {
@@ -163,6 +169,7 @@ class GetNonisomorphicAddons(OP):
                 "addon_pos_index_list_file": Path(
                     f"addon_pos_index_list_file_{identity_string}"
                 ),
+                "certif_string_file": Path(f"certif_string_file_{identity_string}"),
                 "atoms_file_list": atoms_list,
                 "task_num": len(candidategraph_list),
             }
@@ -182,6 +189,7 @@ class GatherNonisomorphicAddons(OP):
                 "candidategraph_list_file": Artifact(List[Path]),
                 "candidategraph_name_list_file": Artifact(List[Path]),
                 "addon_pos_index_list_file": Artifact(List[Path]),
+                "certif_string_file": Artifact(List[Path]),
                 "atoms_file_list": Artifact(List[Path]),
             }
         )
@@ -193,6 +201,7 @@ class GatherNonisomorphicAddons(OP):
                 "candidategraph_list": List[str],
                 "candidategraph_name_list": BigParameter(List[str]),
                 "atoms_file_list": Artifact(List[Path]),
+                "addon_pos_index_list": BigParameter(List[List[int]]),
                 "task_num": int,
             }
         )
@@ -206,9 +215,13 @@ class GatherNonisomorphicAddons(OP):
         candidategraph_name_list = []
         atoms_list = []
         total_count_idx = 0
+        addon_pos_index_list = []
         for filei, _ in enumerate(op_in["candidategraph_name_list_file"]):
-            addon_pos_index_list = jsonpickle.loads(
+            op_in_addon_pos_index_list = jsonpickle.loads(
                 op_in["addon_pos_index_list_file"][filei].read_text()
+            )
+            certif_string_list = jsonpickle.loads(
+                op_in["certif_string_file"][filei].read_text()
             )
             op_in_candidategraph_list = [
                 list(map(int, i.split(",")))
@@ -220,10 +233,13 @@ class GatherNonisomorphicAddons(OP):
                 op_in["candidategraph_name_list_file"][filei].read_text().split("\n")
             )
             for i in range(len(op_in_candidategraph_list)):
-                label = addon_pos_index_list[i]
+                label = certif_string_list[i]
                 if label not in label_list:
                     label_list.append(label)
-                    candidategraph_list.append(label)
+                    candidategraph_list.append(op_in_addon_pos_index_list[i])
+                    addon_pos_index_list.append(
+                        [int(item) for item in op_in_addon_pos_index_list[i].split("_")]
+                    )
                     candidategraph_name_list.append(op_in_candidategraph_name_list[i])
                     atoms_list.append(op_in["atoms_file_list"][total_count_idx])
                 total_count_idx += 1
@@ -233,6 +249,7 @@ class GatherNonisomorphicAddons(OP):
                 "candidategraph_list": candidategraph_list,
                 "candidategraph_name_list": candidategraph_name_list,
                 "atoms_file_list": atoms_list,
+                "addon_pos_index_list": addon_pos_index_list,
                 "task_num": len(atoms_list),
             }
         )
@@ -261,6 +278,7 @@ def establish_parrel_generate_nonisomorphic_addon_steps(
             parameters={
                 "candidategraph_list": OutputParameter(),
                 "candidategraph_name_list": OutputParameter(),
+                "addon_pos_index_list": OutputParameter(),
                 "task_num": OutputParameter(),
             },
         ),
@@ -279,6 +297,7 @@ def establish_parrel_generate_nonisomorphic_addon_steps(
                 "candidategraph_name_list_file",
                 "atoms_file_list",
                 "addon_pos_index_list_file",
+                "certif_string_file",
             ],
             group_size=generate_addons_group_size,
             pool_size=1,
@@ -313,6 +332,9 @@ def establish_parrel_generate_nonisomorphic_addon_steps(
                     "candidategraph_name_list_file"
                 ]
             ),
+            "certif_string_file": generate_nonisomorphic_addon_step.outputs.artifacts[
+                "certif_string_file"
+            ],
             "atoms_file_list": generate_nonisomorphic_addon_step.outputs.artifacts[
                 "atoms_file_list"
             ],
@@ -334,6 +356,9 @@ def establish_parrel_generate_nonisomorphic_addon_steps(
 
     steps.outputs.artifacts["atoms_file_list"] = OutputArtifact(
         _from=gather_nonisomorphic_addon_step.outputs.artifacts["atoms_file_list"]
+    )
+    steps.outputs.parameters["addon_pos_index_list"].value_from_parameter = (
+        gather_nonisomorphic_addon_step.outputs.parameters["addon_pos_index_list"]
     )
     steps.outputs.parameters["task_num"].value_from_parameter = (
         gather_nonisomorphic_addon_step.outputs.parameters["task_num"]

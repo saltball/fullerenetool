@@ -4,31 +4,54 @@ from typing import List
 from dflow.python import OP, OPIO, Artifact, BigParameter, OPIOSign
 
 
-@OP.function
-def GatherEnergies(
-    candidategraph_list: List[str],
-    calculated_atoms_xyz: Artifact(List[Path]),
-) -> {
-    "addons_index_list": BigParameter(List[str]),
-    "energy_list": BigParameter(List[float]),
-    "calculated_atoms_xyz": Artifact(List[Path]),
-}:
+class GatherEnergies(OP):
     """
     Gather the energies of the addons.
     """
-    from ase.io.extxyz import read_extxyz
 
-    addons_index_list = []
-    energy_list = []
-    for i, candidategraph in enumerate(candidategraph_list):
-        addons_index_list.append(candidategraph)
-        atoms = list(read_extxyz(calculated_atoms_xyz[i].open("r")))[-1]
-        energy_list.append(float(atoms.get_potential_energy()))
-    return {
-        "addons_index_list": addons_index_list,
-        "energy_list": energy_list,
-        "calculated_atoms_xyz": calculated_atoms_xyz,
-    }
+    def __init__(self):
+        pass
+
+    @classmethod
+    def get_input_sign(cls):
+        return OPIOSign(
+            {
+                "candidategraph_list": List[str],
+                "calculated_atoms_xyz": Artifact(List[Path]),
+            }
+        )
+
+    @classmethod
+    def get_output_sign(cls):
+        return OPIOSign(
+            {
+                "addons_index_list": BigParameter(List[str]),
+                "energy_list": BigParameter(List[float]),
+                "calculated_atoms_xyz": Artifact(List[Path]),
+            }
+        )
+
+    @OP.exec_sign_check
+    def execute(
+        self,
+        op_in: OPIO,
+    ) -> OPIO:
+        from ase.io.extxyz import read_extxyz
+
+        candidategraph_list = op_in["candidategraph_list"]
+        calculated_atoms_xyz = op_in["calculated_atoms_xyz"]
+
+        addons_index_list = []
+        energy_list = []
+        for i, candidategraph in enumerate(candidategraph_list):
+            addons_index_list.append(candidategraph)
+            atoms = list(read_extxyz(calculated_atoms_xyz[i].open("r")))[-1]
+            energy_list.append(float(atoms.get_potential_energy()))
+        return {
+            "addons_index_list": addons_index_list,
+            "energy_list": energy_list,
+            "calculated_atoms_xyz": calculated_atoms_xyz,
+        }
 
 
 class IsomerSort(OP):
@@ -51,6 +74,7 @@ class IsomerSort(OP):
                 "addons_index_list": BigParameter(List[str]),
                 "energy_list": BigParameter(List[float]),
                 "calculated_atoms_xyz": Artifact(List[Path]),
+                "addon_pos_index_list": BigParameter(List[List[int]]),
                 "pick_first_n": int,
             }
         )
@@ -62,6 +86,7 @@ class IsomerSort(OP):
                 "addons_index_list": BigParameter(List[str]),
                 "energy_list": BigParameter(List[float]),
                 "calculated_atoms_xyz": Artifact(List[Path]),
+                "addon_pos_index_list": List[List[int]],
             }
         )
 
@@ -73,16 +98,27 @@ class IsomerSort(OP):
         addons_index_list = op_in["addons_index_list"]
         energy_list = op_in["energy_list"]
         calculated_atoms_xyz = op_in["calculated_atoms_xyz"]
+        addon_pos_index_list = op_in["addon_pos_index_list"]
         pick_first_n = op_in["pick_first_n"]
         if pick_first_n > 0:
             sorted_data = sorted(
-                zip(addons_index_list, energy_list, calculated_atoms_xyz),
+                zip(
+                    addons_index_list,
+                    energy_list,
+                    calculated_atoms_xyz,
+                    addon_pos_index_list,
+                ),
                 key=lambda x: x[1],
                 reverse=False,
             )[:pick_first_n]
         else:
             sorted_data = sorted(
-                zip(addons_index_list, energy_list, calculated_atoms_xyz),
+                zip(
+                    addons_index_list,
+                    energy_list,
+                    calculated_atoms_xyz,
+                    addon_pos_index_list,
+                ),
                 key=lambda x: x[1],
                 reverse=False,
             )
@@ -92,5 +128,6 @@ class IsomerSort(OP):
                 "addons_index_list": [x[0] for x in sorted_data],
                 "energy_list": [x[1] for x in sorted_data],
                 "calculated_atoms_xyz": [Path(x[2]) for x in sorted_data],
+                "addon_pos_index_list": [x[3] for x in sorted_data],
             }
         )
