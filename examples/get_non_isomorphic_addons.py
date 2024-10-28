@@ -1,6 +1,7 @@
 import ase
 import networkx as nx
 import numpy as np
+import pynauty as pn
 from ase.build import molecule
 
 from fullerenetool.fullerene.derivatives import (
@@ -10,6 +11,7 @@ from fullerenetool.fullerene.derivatives import (
     addons_to_fullerene,
 )
 from fullerenetool.operator.fullerene.addon_generator import generate_addons_and_filter
+from fullerenetool.operator.graph import nx_to_nauty
 
 C60 = molecule("C60")
 
@@ -40,9 +42,17 @@ XCl = DerivativeGroup(
 )
 
 fulleren_init = FullereneCage(C60)
+
+canon_index = pn.canon_label(
+    nx_to_nauty(fulleren_init.graph.graph, include_z_labels=False)
+)
+
+fulleren_init = FullereneCage(C60[np.array(canon_index)])
+print(pn.canon_label(nx_to_nauty(fulleren_init.graph.graph, include_z_labels=False)))
+
 addon = XCl
 addon_start = 2
-start_idx = [0, 8]
+start_idx = [0, 17]
 add_num = 1
 
 dev_groups = [addon] * addon_start
@@ -54,13 +64,21 @@ dev_graph, dev_fullerenes = addons_to_fullerene(
 )
 devgraph = DerivativeFullereneGraph(
     adjacency_matrix=dev_graph.adjacency_matrix,
-    cage_elements=dev_graph.node_elements,
-    addons=[],
+    cage_elements=dev_graph.cage_elements,
+    addons=dev_groups,
 )
 candidategraph_list = []
 candidategraph_name_list = []
 atoms_list = []
 addon_pos_index_list = []
 
+cage_graph = devgraph.cage_graph
+print("devgraph", devgraph)
+tmp_cage_graph = cage_graph.graph.copy()
+tmp_pn_graph = pn.canon_graph(nx_to_nauty(tmp_cage_graph, include_z_labels=False))
+print("cage_graph", cage_graph)
 for idx, candidategraph in enumerate(generate_addons_and_filter(devgraph, add_num)):
     print(idx, candidategraph)
+    print(candidategraph[1].nodes)
+
+# fulleren_init.graph.visualize()

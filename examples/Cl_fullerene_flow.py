@@ -39,7 +39,10 @@ from fullerenetool.operator.flow.ops.model.mace import CalculateEnergy
 # if "__file__" in locals():
 #     upload_packages.append(__file__)
 upload_packages.append(fullerenetool.__path__[0])
-set_config(util_image="python:latest", save_path_as_parameter=True)
+set_config(
+    util_image="python:latest",
+    # save_path_as_parameter=True
+)
 
 simple_machine_template_config = {
     "annotations": {
@@ -62,7 +65,7 @@ t4_gpu_machine_template_config = {
 }
 gpu_machine_template_config = {
     "annotations": {
-        "k8s.aliyun.com/eci-use-specs": "ecs.gn7i-c8g1.2xlarge",
+        "k8s.aliyun.com/eci-use-specs": "ecs.gn6i-c4g1.xlarge,ecs.gn7i-c8g1.2xlarge",
         # 指定vCPU和内存，仅支持2 vCPU及以上规格
         "k8s.aliyun.com/eci-spot-strategy": "SpotWithPriceLimit",  # 采用系统自动出价，跟随当前市场实际价格
         "k8s.aliyun.com/eci-spot-price-limit": "3.0",  # 设置最高出价
@@ -125,9 +128,6 @@ def add_exo_steps(
             CalculateEnergy,
             image=image,
             slices=Slices(
-                input_parameter=[
-                    "output_name",
-                ],
                 input_artifact=[
                     "atoms_file",
                 ],
@@ -142,9 +142,6 @@ def add_exo_steps(
             **gpu_machine_template_config,
         ),
         parameters={
-            "output_name": candidategraph_list_step.outputs.parameters[
-                "candidategraph_name_list"
-            ],
             "optimize": True,
         },
         artifacts={
@@ -290,7 +287,7 @@ if __name__ == "__main__":
         FullereneCage(C60),
         XCl,
         addon_start=2,
-        start_idx_list=[[0, 8]],
+        start_idx_list=[[0, 8], [0, 17]],
         group_size=30,
         # addon_max=40,
         addon_step=1,

@@ -15,7 +15,6 @@ class CalculateEnergy(OP):
         return OPIOSign(
             {
                 "atoms_file": Artifact(Path),
-                "output_name": BigParameter(str),
                 "optimize": bool,
             }
         )
@@ -43,7 +42,7 @@ class CalculateEnergy(OP):
 
         atoms = list(read_extxyz(Path(op_in["atoms_file"]).open("r"), -1))[-1]
         optimize = op_in["optimize"]
-        output_name = op_in["output_name"] + ".xyz"
+        output_name = Path(op_in["atoms_file"]).stem + ".xyz"
 
         # atoms_string = io.StringIO()
         st_time = time.perf_counter()

@@ -75,6 +75,9 @@ class GetNonisomorphicAddons(OP):
         addon_start = op_in["addon_start"]
         start_idx = op_in["start_idx"]
         add_num = op_in["add_num"]
+        identity_string = (
+            "_".join(str(idx) for idx in start_idx) if start_idx else "none"
+        )
 
         dev_groups = [addon] * addon_start
         dev_graph, dev_fullerenes = addons_to_fullerene(
@@ -95,6 +98,7 @@ class GetNonisomorphicAddons(OP):
         candidategraph_name_list = []
         atoms_list = []
         addon_pos_index_list = []
+        Path("atoms_file_list_{}".format(identity_string)).mkdir(exist_ok=True)
 
         for idx, candidategraph in enumerate(
             generate_addons_and_filter(devgraph, add_num)
@@ -118,7 +122,7 @@ class GetNonisomorphicAddons(OP):
             new_isomer_name = "{}_{}({})_add({})".format(
                 fulleren_init.name,
                 addon.name,
-                "_".join(str(start_idx)) if start_idx else "_none",
+                identity_string,
                 "_".join(str(i) for i in candidategraph[0]),
             )
             addon_pos_index = "_".join(
@@ -128,28 +132,37 @@ class GetNonisomorphicAddons(OP):
                 ]
             )
             candidategraph_name_list.append(new_isomer_name)
-            write_extxyz(Path(new_isomer_name + ".xyz").open("w"), dev_fullerene)
-            atoms_list.append(Path(new_isomer_name + ".xyz"))
+            atoms_file_name = Path("atoms_file_list_{}".format(identity_string)) / Path(
+                new_isomer_name + ".xyz"
+            )
+            write_extxyz(atoms_file_name.open("w"), dev_fullerene)
+            atoms_list.append(atoms_file_name)
             addon_pos_index_list.append(addon_pos_index)
 
-        Path("candidategraph_list_file").write_text(
+        Path(f"candidategraph_list_file_{identity_string}").write_text(
             "\n".join(
                 ",".join(str(i) for i in graph_index)
                 for graph_index in candidategraph_list
             )
         )
-        Path("candidategraph_name_list_file").write_text(
+        Path(f"candidategraph_name_list_file_{identity_string}").write_text(
             "\n".join(candidategraph_name_list)
         )
-        Path("addon_pos_index_list_file").write_text(
+        Path(f"addon_pos_index_list_file_{identity_string}").write_text(
             jsonpickle.dumps(addon_pos_index_list)
         )
 
         op_out = OPIO(
             {
-                "candidategraph_list_file": Path("candidategraph_list_file"),
-                "candidategraph_name_list_file": Path("candidategraph_name_list_file"),
-                "addon_pos_index_list_file": Path("addon_pos_index_list_file"),
+                "candidategraph_list_file": Path(
+                    f"candidategraph_list_file_{identity_string}"
+                ),
+                "candidategraph_name_list_file": Path(
+                    f"candidategraph_name_list_file_{identity_string}"
+                ),
+                "addon_pos_index_list_file": Path(
+                    f"addon_pos_index_list_file_{identity_string}"
+                ),
                 "atoms_file_list": atoms_list,
                 "task_num": len(candidategraph_list),
             }
@@ -166,9 +179,9 @@ class GatherNonisomorphicAddons(OP):
     def get_input_sign(cls):
         return OPIOSign(
             {
-                "candidategraph_list_file": Artifact(Path),
-                "candidategraph_name_list_file": Artifact(Path),
-                "addon_pos_index_list_file": Artifact(Path),
+                "candidategraph_list_file": Artifact(List[Path]),
+                "candidategraph_name_list_file": Artifact(List[Path]),
+                "addon_pos_index_list_file": Artifact(List[Path]),
                 "atoms_file_list": Artifact(List[Path]),
             }
         )
@@ -177,7 +190,7 @@ class GatherNonisomorphicAddons(OP):
     def get_output_sign(cls):
         return OPIOSign(
             {
-                "candidategraph_list": List[List[int]],
+                "candidategraph_list": List[str],
                 "candidategraph_name_list": BigParameter(List[str]),
                 "atoms_file_list": Artifact(List[Path]),
                 "task_num": int,
@@ -188,34 +201,39 @@ class GatherNonisomorphicAddons(OP):
     def execute(self, op_in):
         import jsonpickle
 
-        addon_pos_index_list = jsonpickle.loads(
-            op_in["addon_pos_index_list_file"].read_text()
-        )
-        op_in_candidategraph_list = [
-            list(map(int, i.split(",")))
-            for i in op_in["candidategraph_list_file"].read_text().split("\n")
-        ]
-        op_in_candidategraph_name_list = (
-            op_in["candidategraph_name_list_file"].read_text().split("\n")
-        )
         label_list = []
         candidategraph_list = []
         candidategraph_name_list = []
         atoms_list = []
-        for i, _ in enumerate(op_in_candidategraph_name_list):
-            label = addon_pos_index_list[i]
-            if label not in label_list:
-                label_list.append(label)
-                candidategraph_list.append(op_in_candidategraph_list[i])
-                candidategraph_name_list.append(op_in_candidategraph_name_list[i])
-                atoms_list.append(op_in["atoms_file_list"][i])
+        total_count_idx = 0
+        for filei, _ in enumerate(op_in["candidategraph_name_list_file"]):
+            addon_pos_index_list = jsonpickle.loads(
+                op_in["addon_pos_index_list_file"][filei].read_text()
+            )
+            op_in_candidategraph_list = [
+                list(map(int, i.split(",")))
+                for i in op_in["candidategraph_list_file"][filei]
+                .read_text()
+                .split("\n")
+            ]
+            op_in_candidategraph_name_list = (
+                op_in["candidategraph_name_list_file"][filei].read_text().split("\n")
+            )
+            for i in range(len(op_in_candidategraph_list)):
+                label = addon_pos_index_list[i]
+                if label not in label_list:
+                    label_list.append(label)
+                    candidategraph_list.append(label)
+                    candidategraph_name_list.append(op_in_candidategraph_name_list[i])
+                    atoms_list.append(op_in["atoms_file_list"][total_count_idx])
+                total_count_idx += 1
 
         op_out = OPIO(
             {
                 "candidategraph_list": candidategraph_list,
                 "candidategraph_name_list": candidategraph_name_list,
                 "atoms_file_list": atoms_list,
-                "task_num": len(candidategraph_list),
+                "task_num": len(atoms_list),
             }
         )
         return op_out

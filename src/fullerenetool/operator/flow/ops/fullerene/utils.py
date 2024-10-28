@@ -6,10 +6,10 @@ from dflow.python import OP, OPIO, Artifact, BigParameter, OPIOSign
 
 @OP.function
 def GatherEnergies(
-    candidategraph_list: List[List[int]],
+    candidategraph_list: List[str],
     calculated_atoms_xyz: Artifact(List[Path]),
 ) -> {
-    "addons_index_list": BigParameter(List[List[int]]),
+    "addons_index_list": BigParameter(List[str]),
     "energy_list": BigParameter(List[float]),
     "calculated_atoms_xyz": Artifact(List[Path]),
 }:
@@ -21,7 +21,7 @@ def GatherEnergies(
     addons_index_list = []
     energy_list = []
     for i, candidategraph in enumerate(candidategraph_list):
-        addons_index_list.append(list(candidategraph))
+        addons_index_list.append(candidategraph)
         atoms = list(read_extxyz(calculated_atoms_xyz[i].open("r")))[-1]
         energy_list.append(float(atoms.get_potential_energy()))
     return {
@@ -48,7 +48,7 @@ class IsomerSort(OP):
     def get_input_sign(cls):
         return OPIOSign(
             {
-                "addons_index_list": BigParameter(List[List[int]]),
+                "addons_index_list": BigParameter(List[str]),
                 "energy_list": BigParameter(List[float]),
                 "calculated_atoms_xyz": Artifact(List[Path]),
                 "pick_first_n": int,
@@ -59,7 +59,7 @@ class IsomerSort(OP):
     def get_output_sign(cls):
         return OPIOSign(
             {
-                "addons_index_list": BigParameter(List[List[int]]),
+                "addons_index_list": BigParameter(List[str]),
                 "energy_list": BigParameter(List[float]),
                 "calculated_atoms_xyz": Artifact(List[Path]),
             }
