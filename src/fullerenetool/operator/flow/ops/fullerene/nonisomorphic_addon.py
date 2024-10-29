@@ -89,8 +89,8 @@ class GetNonisomorphicAddons(OP):
         )
         devgraph = DerivativeFullereneGraph(
             adjacency_matrix=dev_graph.adjacency_matrix,
-            cage_elements=dev_graph.node_elements,
-            addons=[],
+            cage_elements=dev_graph.cage_elements,
+            addons=dev_groups,
         )
         origin_dev = devgraph.generate_atoms_with_addons(
             b2n2_steps=50, traj="traj", init_pos=dev_fullerenes.positions

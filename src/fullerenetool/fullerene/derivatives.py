@@ -7,6 +7,7 @@ import ase
 import networkx as nx
 import numpy as np
 
+from fullerenetool.constant import covalent_bond
 from fullerenetool.fullerene._base_fullerene import BaseAbstartFullerene
 from fullerenetool.fullerene.cage import (
     DEFAULT_MAX_STEPS,
@@ -135,7 +136,7 @@ class DerivativeGroup:
         if addon_atom_idx is not None:  # addon_atom_idx offered, addon site is signed
             if atoms[addon_atom_idx].symbol != "X":
                 raise ValueError(
-                    "The addon atom is not a pseudo atom, but use addon atom index."
+                    "The addon atom is not a pseudo atom, please specify the pseudo."
                 )
         else:
             if "X" in atoms.get_chemical_symbols():
@@ -206,7 +207,7 @@ class DerivativeGroup:
             fullerene.atoms,
             idx,
             self.atoms,
-            self.addon_atom_idx,
+            self.first_neighbor,
             None,
         )
         dev = add_out_of_cage(
@@ -265,9 +266,11 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
         self.addons_elements = addons_elements
         self.addons = addons
         self.cage_atom_index = range(len(cage_elements))
-        self.addon_atom_index = range(
-            len(cage_elements), len(cage_elements) + len(addons_elements)
-        )
+        self.addon_atom_index = []
+        addon_idx_count = len(self.cage_elements)
+        for addon in addons:
+            self.addon_atom_index.append(addon.addon_atom_idx + addon_idx_count)
+            addon_idx_count += len(filter_ghost_atom(addon.atoms))
 
     @property
     def addon_sites(self):
@@ -325,9 +328,16 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
                             "Cannot add the addon because the connection is not 1, "
                             + "got {}".format(addon_index[0].size)
                         )
-                    addon_pos = init_pos[addon_index]
+                    addon_pos = init_pos[addon_index[0]]
                     new_init_pos[add_pos_index] = (
-                        inside_center + (addon_pos - inside_center) * 1.5
+                        inside_center
+                        + (addon_pos - inside_center) * 1.2
+                        + covalent_bond[
+                            int(self.node_elements[add_pos_index]),
+                            int(self.node_elements[addon_index[0]]),
+                        ]
+                        * ((addon_pos - inside_center))
+                        / np.linalg.norm((addon_pos - inside_center))
                     )
 
             else:

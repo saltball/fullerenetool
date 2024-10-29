@@ -125,7 +125,7 @@ def add_exo_steps(
             gpu_machine_template_config=gpu_machine_template_config,
             group_size=group_size,
             image=image,
-            generate_addons_group_size=5,
+            generate_addons_group_size=generate_addons_group_size,
         ),
         parameters={
             "fulleren_init": add_steps.inputs.parameters["fulleren_init"],
@@ -255,6 +255,7 @@ def add_exo_steps(
 
 
 def run(
+    flow_name,
     fulleren_init: FullereneCage,
     addon: DerivativeGroup,
     addon_start: int = 0,
@@ -277,7 +278,7 @@ def run(
         addon_bond_length: bond length of addon
     """
     wf = Workflow(
-        name="fullerene-dev",
+        name=flow_name,
     )
     addon_step = Step(
         name="addon-step",
@@ -312,7 +313,7 @@ if __name__ == "__main__":
     C60 = molecule("C60")
     XCl = DerivativeGroup(
         atoms=ase.Atoms(
-            "XCl",
+            "XF",
             [
                 [0.1, 0.1, -0.2],
                 [0, 0, 0],
@@ -343,12 +344,15 @@ if __name__ == "__main__":
 
     fulleren_init = FullereneCage(C60[np.array(canon_index)])
     run(
+        "fullerene-dev-{}".format(
+            (fulleren_init.name + "-" + XCl.name).lower().replace("_", "-")
+        ),
         fulleren_init,
         XCl,
         addon_start=0,
         start_idx_list=[[]],
         group_size=1000,
-        generate_addons_group_size=10,
+        generate_addons_group_size=20,
         addon_max=20,
         addon_step=1,
         pick_first_n=100,

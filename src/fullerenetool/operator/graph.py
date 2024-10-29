@@ -6,6 +6,44 @@ from ase.neighborlist import NeighborList, natural_cutoffs
 from fullerenetool.logger import logger
 
 
+def canon_graph(g):
+    """
+    NOTE: current pynauty lib is not working for graph with more than 64 nodes
+    Compute the canonically labeled version of graph g.
+
+    *g*
+        A Graph object.
+
+    return ->
+        new canonical graph.
+    """
+    from pynauty import Graph, certificate
+
+    if g.vertex_coloring:
+        raise RuntimeError(
+            "canon_graph() is not implemented for vertex-colored graphs yet."
+        )
+    c = certificate(g)
+    set_length = len(c) // g.number_of_vertices
+    sets = [
+        c[set_length * k : set_length * (k + 1)] for k in range(g.number_of_vertices)
+    ]
+    WORDSIZE = len(sets[0])
+    neighbors = [
+        [
+            i % 64
+            for i in range(set_length * WORDSIZE)
+            if st[-1 - i // 8] & (1 << (8 - 1 - i % 8))
+        ]
+        for st in sets
+    ]
+    return Graph(
+        number_of_vertices=g.number_of_vertices,
+        directed=g.directed,
+        adjacency_dict={i: neighbors[i] for i in range(g.number_of_vertices)},
+    )
+
+
 def get_graph_from_atoms(atoms: ase.Atoms, only_top3=True) -> nx.Graph:
     """Get a networkx graph object from an ase.Atoms object.
 

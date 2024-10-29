@@ -9,7 +9,7 @@ except ImportError:
     )
 
 from fullerenetool.fullerene.derivatives import DerivativeFullereneGraph
-from fullerenetool.operator.graph import nx_to_nauty
+from fullerenetool.operator.graph import canon_graph, nx_to_nauty
 
 
 def generate_addons_and_filter(
@@ -86,8 +86,14 @@ def generate_addons_and_filter(
             for isite in isites:  # 遍历节点对中的节点
                 new_node = len(tmp_cage_graph)  # 新的节点添加在末尾
                 tmp_cage_graph.add_edge(new_node, isite)  # 新的图
-            tmp_pn_graph = pn.canon_graph(
+                tmp_cage_graph.add_edge(isite, new_node)  # 新的图
+            tmp_pn_graph = canon_graph(
                 nx_to_nauty(tmp_cage_graph, include_z_labels=False)
+            )
+            print(tmp_pn_graph)
+            print(pn.canon_graph(nx_to_nauty(tmp_cage_graph, include_z_labels=False)))
+            assert pn.isomorphic(
+                tmp_pn_graph, nx_to_nauty(tmp_cage_graph, include_z_labels=False)
             )
             certif = pn.certificate(tmp_pn_graph) + z_labels.encode()
 
