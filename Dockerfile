@@ -31,7 +31,7 @@ RUN apt-get update > /dev/null && \
 COPY . .
 
 # 安装必要的 Python 包
-RUN mamba install pytorch=*=${PYTORCH_VERSION} && \
+RUN mamba install pytorch=*=${PYTORCH_VERSION} -c nvidia && \
     mamba install dpdata ase numpy scipy && \
     mamba install pymatgen dargs cp2kdata && \
     mamba install cython setuptools setuptools_scm wheel boost && \
@@ -73,7 +73,7 @@ RUN apt-get update > /dev/null && \
     echo ". ${CONDA_DIR}/etc/profile.d/conda.sh && conda activate base" >> ~/.bashrc
 
 # 安装必要的 Python 包
-RUN mamba install pytorch pytorch-cuda=12.4 -c pytorch -c nvidia && \
+RUN mamba install pytorch=*=${PYTORCH_VERSION} -c nvidia && \
     mamba install dpdata ase numpy scipy && \
     mamba install pymatgen dargs cp2kdata -c conda-forge && \
     mamba install deprecation pynauty networkx tenacity pymace -c conda-forge && \
