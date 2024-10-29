@@ -103,15 +103,15 @@ class GetNonisomorphicAddons(OP):
         Path("atoms_file_list_{}".format(identity_string)).mkdir(exist_ok=True)
 
         for idx, candidategraph in enumerate(
-            generate_addons_and_filter(devgraph, add_num)
+            generate_addons_and_filter(devgraph, add_num, [addon] * add_num)
         ):
             st_time = time.perf_counter()
             logger.info("{} {}".format(idx, candidategraph))
             graph = candidategraph[1]
             dev_fullerene = DerivativeFullereneGraph(
                 adjacency_matrix=nx.adjacency_matrix(graph).todense(),
-                cage_elements=devgraph.node_elements,
-                addons=[addon] * add_num,
+                cage_elements=devgraph.cage_elements,
+                addons=devgraph.addons + [addon] * add_num,
             ).generate_atoms_with_addons(
                 algorithm="cagethenaddons",
                 init_pos=origin_dev.positions,

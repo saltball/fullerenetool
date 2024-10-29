@@ -89,7 +89,9 @@ def test_generate_addon_position():
         cage_elements=dev_graph.node_elements,
         addons=[],
     )
-    for idx, candidategraph in enumerate(generate_addons_and_filter(devgraph, 2)):
+    for idx, candidategraph in enumerate(
+        generate_addons_and_filter(devgraph, 2, [addon] * 2)
+    ):
         graph = candidategraph[1]
         print(graph)
         # dev_fullerene = DerivativeFullereneGraph(

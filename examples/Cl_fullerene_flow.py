@@ -311,29 +311,12 @@ if __name__ == "__main__":
     from fullerenetool.operator.graph import nx_to_nauty
 
     C60 = molecule("C60")
-    XCl = DerivativeGroup(
+    addon_mol = DerivativeGroup(
         atoms=ase.Atoms(
-            "XF",
-            [
-                [0.1, 0.1, -0.2],
-                [0, 0, 0],
-                # [0, 0, 1.4]
-            ],
+            "XOH",
+            [[0.5, 0.5, 0.0], [0, 0, 0], [0, 0, 1.4]],
         ),
-        graph=nx.from_numpy_array(
-            np.array(
-                [
-                    [
-                        0,
-                        1,
-                    ],
-                    [
-                        1,
-                        0,
-                    ],
-                ]
-            )
-        ),
+        graph=nx.from_numpy_array(np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]])),
         addon_atom_idx=0,
     )
     fulleren_init = FullereneCage(C60)
@@ -345,17 +328,17 @@ if __name__ == "__main__":
     fulleren_init = FullereneCage(C60[np.array(canon_index)])
     run(
         "fullerene-dev-{}".format(
-            (fulleren_init.name + "-" + XCl.name).lower().replace("_", "-")
+            (fulleren_init.name + "-" + addon_mol.name).lower().replace("_", "-")
         ),
         fulleren_init,
-        XCl,
+        addon_mol,
         addon_start=0,
         start_idx_list=[[]],
-        group_size=1000,
+        group_size=250,
         generate_addons_group_size=20,
         addon_max=20,
         addon_step=1,
-        pick_first_n=100,
+        pick_first_n=50,
         # addon_bond_length=1.4
         gpu_machine_template_config=gpu_machine_template_config,
     )

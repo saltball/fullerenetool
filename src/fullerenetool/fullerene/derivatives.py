@@ -130,9 +130,9 @@ class DerivativeGroup:
         graph: nx.Graph,
         bond_length: float = None,
         addon_atom_idx: Optional[int] = None,
-        addtofullerene=True,
     ):
         adj_matrix = nx.adjacency_matrix(graph).todense()
+        assert adj_matrix.shape[0] == len(atoms)
         if addon_atom_idx is not None:  # addon_atom_idx offered, addon site is signed
             if atoms[addon_atom_idx].symbol != "X":
                 raise ValueError(

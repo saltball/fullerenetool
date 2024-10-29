@@ -8,51 +8,70 @@ except ImportError:
         "if you install pynauty in your runtime environment.",
     )
 
-from fullerenetool.fullerene.derivatives import DerivativeFullereneGraph
+from typing import List
+
+from fullerenetool.fullerene.derivatives import (
+    DerivativeFullereneGraph,
+    DerivativeGroup,
+)
 from fullerenetool.operator.graph import canon_graph, nx_to_nauty
 
 
 def generate_addons_and_filter(
     fullerene_dev: DerivativeFullereneGraph,
     addon_num: int,
+    addons_list: List[DerivativeGroup],
 ):
     """_summary_
 
     example:
     ```
-    from ase.build import molecule
-    C60 = molecule('C60')
-    init_fullerene = FullereneCage(C60)
-    dev_groups = [DerivativeGroup(
+    C60 = molecule("C60")
+    addon = DerivativeGroup(
         atoms=ase.Atoms(
-            'XCl',
+            "XCl",
             [
                 [0.1, 0.1, -0.2],
                 [0, 0, 0],
                 # [0, 0, 1.4]
-            ]
+            ],
         ),
         graph=nx.from_numpy_array(
-            np.array([[0, 1,], [1, 0,]])
+            np.array(
+                [
+                    [
+                        0,
+                        1,
+                    ],
+                    [
+                        1,
+                        0,
+                    ],
+                ]
+            )
         ),
         addon_atom_idx=0,
-        # bond_length=1.4,
-    )]*2
+    )
+    fullereneinit = FullereneCage(C60)
+    dev_groups = [addon] * 0
     dev_graph, dev_fullerenes = addons_to_fullerene(
         dev_groups,
-        [0, 1],
-        init_fullerene,
-        nx.adjacency_matrix(init_fullerene.graph.graph).todense(),
+        [],
+        fullereneinit,
+        nx.adjacency_matrix(fullereneinit.graph.graph).todense(),
     )
     devgraph = DerivativeFullereneGraph(
         adjacency_matrix=dev_graph.adjacency_matrix,
         cage_elements=dev_graph.node_elements,
         addons=[],
     )
-    candidategraph_list = []
-    for idx, candidategraph in enumerate(generate_addons_and_filter(devgraph, 1)):
-        candidategraph_list.append(candidategraph)
-        print(idx, candidategraph)
+    for idx, candidategraph in enumerate(
+        generate_addons_and_filter(
+            devgraph, 2, [addon] * 2
+        )
+    ):
+        graph = candidategraph[1]
+        print(graph)
     ```
 
     Args:
@@ -66,6 +85,9 @@ def generate_addons_and_filter(
         _type_: _description_
     """
     cage = fullerene_dev
+    assert (
+        len(addons_list) == addon_num
+    ), "The number of addons must be equal to the number of addon_site_idx"
     candidate_sites = fullerene_dev.addon_sites
     z_labels = "".join([str(i) for i in cage.node_elements])
     candidate_pairs = [[] for _ in range(addon_num)]
@@ -85,15 +107,32 @@ def generate_addons_and_filter(
             tmp_cage_graph = cage.graph.copy()  # 操作的图
             for isite in isites:  # 遍历节点对中的节点
                 new_node = len(tmp_cage_graph)  # 新的节点添加在末尾
-                tmp_cage_graph.add_edge(new_node, isite)  # 新的图
-                tmp_cage_graph.add_edge(isite, new_node)  # 新的图
+                for addon in addons_list:
+                    addon_graph = addon.graph.copy()
+                    addon_graph.remove_node(addon.addon_atom_idx)
+                    tmp_cage_graph.add_edge(
+                        (
+                            new_node + addon.first_neighbor - 1
+                            if addon.first_neighbor > addon.addon_atom_idx
+                            else addon.first_neighbor
+                        ),
+                        isite,
+                    )  # 新的图
+                    for edges in addon_graph.edges:
+                        tmp_cage_graph.add_edge(
+                            (
+                                new_node + edges[0] - 1
+                                if edges[0] > addon.addon_atom_idx
+                                else edges[0]
+                            ),
+                            (
+                                new_node + edges[1] - 1
+                                if edges[1] > addon.addon_atom_idx
+                                else edges[1]
+                            ),
+                        )
             tmp_pn_graph = canon_graph(
                 nx_to_nauty(tmp_cage_graph, include_z_labels=False)
-            )
-            print(tmp_pn_graph)
-            print(pn.canon_graph(nx_to_nauty(tmp_cage_graph, include_z_labels=False)))
-            assert pn.isomorphic(
-                tmp_pn_graph, nx_to_nauty(tmp_cage_graph, include_z_labels=False)
             )
             certif = pn.certificate(tmp_pn_graph) + z_labels.encode()
 
