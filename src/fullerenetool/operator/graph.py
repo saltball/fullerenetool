@@ -28,20 +28,22 @@ def canon_graph(g):
     sets = [
         c[set_length * k : set_length * (k + 1)] for k in range(g.number_of_vertices)
     ]
-    WORDSIZE = len(sets[0])
     neighbors = [
         [
-            i % 64
-            for i in range(set_length * WORDSIZE)
-            if st[-1 - i // 8] & (1 << (8 - 1 - i % 8))
+            i
+            for i in range(set_length * 8)
+            if st[((set_length >> 4) - (i // 64)) * 8 - (i % 64) // 8 - 1]
+            & (1 << (7 - i % 8))
         ]
         for st in sets
     ]
-    return Graph(
+    graph = Graph(
         number_of_vertices=g.number_of_vertices,
         directed=g.directed,
         adjacency_dict={i: neighbors[i] for i in range(g.number_of_vertices)},
     )
+    assert certificate(graph) == c, "canon_graph() failed, something went wrong."
+    return graph
 
 
 def get_graph_from_atoms(atoms: ase.Atoms, only_top3=True) -> nx.Graph:
