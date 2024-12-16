@@ -17,6 +17,7 @@ def generate_vasp_input(
     ncore,
     kspacing,
     kpar=None,
+    npar=None,
     kgamma=False,
     ispin=1,
     ismear=0,
@@ -28,11 +29,13 @@ def generate_vasp_input(
     pp_files=None,
     ion_relax=None,
     magmom=None,
+    nelm=100,
+    **kwargs,
 ):
     from fpop.vasp import VaspInputs
 
     vasp_input_str = f"""#Initialize
-ISTART = 0
+ISTART = 1
 ICHARG = 2
 ISYM = 0
 PREC = Accurate
@@ -40,7 +43,7 @@ ALGO = Normal # or fast
 
 #Electronic degrees
 ENCUT = {encut}
-NELM    =  100
+NELM    =  {nelm}
 NELMIN  =  6
 EDIFF = {ediff}
 
@@ -52,9 +55,8 @@ SIGMA = {sigma}
 ISPIN = {ispin}
 LMAXMIX = {lmaxmix}
 
-LASPH = True
+LASPH = .TRUE.
 LORBIT = {lorbit}
-ADDGRID = True
 
 #File to write
 LCHARG=F
@@ -62,18 +64,20 @@ LWAVE=F
 
 #Make it faster
 NCORE = {ncore}
-#LREAL=A"""
+NPAR = {npar}
+LREAL=A
+"""
     if kpar is not None:
         if kgamma and kpar != 1:
             raise ValueError("kgamma and kpar cannot be set at the same time")
-        vasp_input_str += f"NPAR = {kpar}\nKGAMMA = False\n"
+        vasp_input_str += f"KPAR = {kpar}\nKGAMMA = False\n"
     else:
         if kgamma:
             vasp_input_str += "KGAMMA = True\n"
     if ion_relax is not None:
-        vasp_input_str += """#Ionic parameters
+        vasp_input_str += f"""#Ionic parameters
 IBRION = 2
-NSW = 60
+NSW = {ion_relax}
 """
     else:
         vasp_input_str += """#Ionic parameters
@@ -82,6 +86,8 @@ NSW = 0
 """
     if magmom is not None:
         vasp_input_str += "MAGMOM = " + " ".join([str(m) for m in magmom]) + "\n"
+    for key, value in kwargs.items():
+        vasp_input_str += "{}={}\n".format(key, value)
     Path(input_path).write_text(vasp_input_str)
     logger.info("vasp input file is written to {}".format(input_path))
     vasp_inputs = VaspInputs(
@@ -97,6 +103,7 @@ NSW = 0
 def prepVaspCalculation(
     calculation_system: BigParameter("dpdata.System"),
     input_obj: BigParameter("fpop.vasp.VaspInputs"),
+    common_optional_files: Artifact(List[Path], optional=True),
 ) -> {"input_dir": Artifact(List[Path]), "task_num": int, "task_name_list": List[str]}:
     import random
     import string
@@ -139,6 +146,11 @@ def prepVaspCalculation(
             Path("KPOINTS").write_text(
                 input_obj.make_kpoints(calculation_sys["cells"][0])
             )
+            if common_optional_files:
+                import shutil
+
+                for file in common_optional_files:
+                    shutil.copy(file, ".")
         result_dir.append(work_dir)
         task_name_list.append(job_name)
     return {
@@ -162,10 +174,15 @@ def runVaspCalculation(
     result_files = [
         "OUTCAR",
         "vasprun.xml",
+        "KPOINTS",
         "CONTCAR",
         "OSZICAR",
         "CHGCAR",
         "WAVECAR",
+        "stdlog",
+        "POSCAR",
+        f"{job_name}.log",
+        f"time_log.{job_name}",
     ]
     import os
     import shutil
@@ -174,9 +191,10 @@ def runVaspCalculation(
     os.chdir(input_dir)
     time_log_path = Path(f"time_log.{job_name}")
     time_log_path.touch()
+    command = f"ulimit -s unlimited >> {job_name}.log && {command} >> {job_name}.log"
     if time_benchmark:
         command = f"""echo START: $(date "+%Y-%m-%d %H:%M:%S")>>\
-            {time_log_path.as_posix()} && {command} | tee {job_name}.log \
+            {time_log_path.as_posix()} && {command}\
             && echo END: $(date "+%Y-%m-%d %H:%M:%S")>>{time_log_path.as_posix()}"""
     ret, out, err = dflow_run_command(
         command,
@@ -187,7 +205,7 @@ def runVaspCalculation(
     )
     Path(job_name).mkdir(parents=True, exist_ok=True)
     for file in result_files:
-        if Path(file).exists():
+        if Path(file).exists() and Path(file).is_file():
             shutil.copy(file, Path(job_name, file))
     return {
         "output_dir": Path(job_name),

@@ -6,7 +6,7 @@ from ase.optimize.lbfgs import LBFGS
 from dflow.python import OP, OPIO, Artifact, BigParameter, OPIOSign
 
 
-class MACECalculateEnergy(OP):
+class DPCalculateEnergy(OP):
     def __init__(self):
         pass
 
@@ -16,6 +16,7 @@ class MACECalculateEnergy(OP):
             {
                 "atoms_file": Artifact(Path),
                 "optimize": bool,
+                "model_file": Artifact(Path),
             }
         )
 
@@ -36,9 +37,9 @@ class MACECalculateEnergy(OP):
         op_in: OPIO,
     ) -> OPIO:
         from ase.io.extxyz import read_extxyz
+        from deepmd.calculator import DP
 
         from fullerenetool.logger import logger
-        from fullerenetool.operator.calculator.mace_calculator import mace_mp
 
         atoms = list(read_extxyz(Path(op_in["atoms_file"]).open("r"), -1))[-1]
         optimize = op_in["optimize"]
@@ -46,7 +47,7 @@ class MACECalculateEnergy(OP):
 
         # atoms_string = io.StringIO()
         st_time = time.perf_counter()
-        atoms.calc = mace_mp()
+        atoms.calc = DP(op_in["model_file"])
         if optimize:
             opt = LBFGS(atoms)
             opt.run(fmax=0.01)

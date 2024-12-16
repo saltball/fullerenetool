@@ -230,6 +230,9 @@ class DerivativeGroup:
     def name(self):
         return "{}".format(filter_ghost_atom(self.atoms).get_chemical_formula())
 
+    def __str__(self):
+        return "DerivativeGroup({})".format(self.name)
+
 
 class DerivativeFullereneGraph(BaseAbstactGraph):
 
@@ -273,7 +276,7 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
             addon_idx_count += len(filter_ghost_atom(addon.atoms))
 
     @property
-    def addon_sites(self):
+    def addon_sites_candidate(self):
         coord_nums = self.adjacency_matrix[self.cage_atom_index].sum(axis=1)
         return np.where(coord_nums == 3)[0]
 
@@ -298,6 +301,7 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
         return CageGraph(
             self.adjacency_matrix[: len(self.cage_elements), : len(self.cage_elements)],
             node_elements=self.cage_elements,
+            atoms=self.kwargs.get("atoms"),
         )
 
     def generate_atoms_with_addons(
@@ -352,6 +356,8 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
             )
             new_init_pos = init_pos[: len(self.cage_elements)]
         else:  # None or complete
+            if init_pos is None:
+                init_pos = self.get("atoms").positions if self.get("atoms") else None
             new_init_pos = init_pos
         if algorithm == "cagethenaddons":
             # cage
@@ -400,6 +406,92 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
             return atoms
         else:
             raise NotImplementedError("Algorithm {} not implemented".format(algorithm))
+
+    def visualize(self, ax=None, color="jmol", atoms=None, **kwargs):
+
+        from ase.data.colors import cpk_colors, jmol_colors
+        from matplotlib import pyplot as plt
+
+        from fullerenetool.fullerene.visualize.cage import planarity_graph_pos
+
+        pos = planarity_graph_pos(
+            FullereneCage(atoms),
+        )
+        pos = {idx: pos[idx][:2] for idx in range(len(pos))}
+
+        if color == "jmol":
+            coloring = jmol_colors
+        elif color == "cpk":
+            coloring = cpk_colors
+        else:
+            coloring = color
+        colors = [
+            coloring[node_z]
+            for node_z in list(
+                nx.get_node_attributes(self.cage_graph.graph, "z").values()
+            )
+        ]
+
+        title = "{} Cage Graph with Coloring in ase format".format(
+            atoms.get_chemical_formula()
+        )
+
+        if ax is None:
+            nx.draw(
+                self.cage_graph.graph,
+                pos,
+                with_labels=True,
+                node_color=colors,
+                node_size=250,
+            )
+            nx.draw(
+                self.graph.subgraph(
+                    list(
+                        range(
+                            self.cage_graph.graph.number_of_nodes(),
+                            self.graph.number_of_nodes(),
+                        )
+                    )
+                ),
+                {
+                    i: pos[i]
+                    for i in pos
+                    if i >= self.cage_graph.graph.number_of_nodes()
+                },
+                with_labels=False,
+                node_color=coloring[len(self.cage_elements) :],
+            )
+            plt.title(title)
+            plt.tight_layout()
+            plt.show()
+        else:
+            nx.draw(
+                self.cage_graph.graph,
+                pos,
+                with_labels=True,
+                node_color=colors,
+                node_size=500,
+                ax=ax,
+            )
+            nx.draw(
+                self.graph.subgraph(
+                    list(
+                        range(
+                            self.cage_graph.graph.number_of_nodes(),
+                            self.graph.number_of_nodes(),
+                        )
+                    )
+                ),
+                {
+                    i: pos[i]
+                    for i in pos
+                    if i >= self.cage_graph.graph.number_of_nodes()
+                },
+                with_labels=False,
+                node_color=coloring[len(self.cage_elements) :],
+                node_size=100,
+                ax=ax,
+            )
 
 
 def addons_to_adj_mat(new_adj, addon_idx, cage_idx):
@@ -450,5 +542,11 @@ def addons_to_fullerene(
         max_steps=50,
         check=False,
         traj="cagethenaddons_" + traj if traj else None,
+    )
+    dev_graph = DerivativeFullereneGraph(
+        adjacency_matrix=new_adj,
+        cage_elements=cage.graph.node_elements,
+        addons=addons_list,
+        atoms=dev_mol,
     )
     return dev_graph, dev_mol

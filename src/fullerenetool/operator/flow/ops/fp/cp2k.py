@@ -129,7 +129,7 @@ def runCp2KCalculation(
         shell=True,
         interactive=False,
         print_oe=True,
-        raise_error=False,
+        raise_error=True,
     )
     logger.error(err)
     return {

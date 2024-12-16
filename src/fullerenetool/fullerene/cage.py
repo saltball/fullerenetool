@@ -108,6 +108,8 @@ class BaseAbstactGraph(ABC):
             ase.Atoms: The atoms structure of the CageGraph by certaining the
                 elements.
         """
+        import os
+
         from ase import Atoms
         from ase.data import chemical_symbols
         from ase.optimize.lbfgs import LBFGS
@@ -115,7 +117,9 @@ class BaseAbstactGraph(ABC):
         elements = elements or [
             chemical_symbols[node_z] for node_z in self.node_elements
         ]
-
+        if self.kwargs.get("atoms"):
+            atoms = self.kwargs["atoms"]
+            return atoms[: len(elements)]
         if (
             init_pos is not None
             and elements is not None
@@ -145,7 +149,11 @@ class BaseAbstactGraph(ABC):
                 ),
                 calculator=calc,
             )
-            opt = LBFGS(atoms, trajectory=traj + "1" if traj else None)
+            opt = LBFGS(
+                atoms,
+                trajectory=traj + "1" if traj else None,
+                logfile=os.devnull,
+            )
             opt.run(fmax=0.001, steps=b2n2_steps)
         else:
             raise NotImplementedError("Unknown algorithm: {}".format(algorithm))
@@ -155,7 +163,9 @@ class BaseAbstactGraph(ABC):
                 device="cuda" if use_gpu else "cpu",
                 no_repulsion=True,
             )
-            opt = LBFGS(atoms, trajectory=traj + "2" if traj else None)
+            opt = LBFGS(
+                atoms, trajectory=traj + "2" if traj else None, logfile=os.devnull
+            )
             opt.run(fmax=0.001, steps=max_steps)
         return atoms
 
@@ -324,6 +334,16 @@ class CageGraph(BaseAbstactGraph):
             self.node_elements,
         )
 
+    def _get_visualize_param(self):
+        from fullerenetool.fullerene.visualize.cage import planarity_graph_pos
+
+        atoms = self.generate_atoms()
+        pos = planarity_graph_pos(
+            FullereneCage(atoms),
+        )
+        pos = {idx: pos[idx][:2] for idx in range(len(pos))}
+        return atoms, pos
+
     def visualize(self, ax=None, color="jmol", **kwargs):
         """_summary_
 
@@ -335,13 +355,7 @@ class CageGraph(BaseAbstactGraph):
         from ase.data.colors import cpk_colors, jmol_colors
         from matplotlib import pyplot as plt
 
-        from fullerenetool.fullerene.visualize.cage import planarity_graph_pos
-
-        atoms = self.generate_atoms()
-        pos = planarity_graph_pos(
-            FullereneCage(atoms),
-        )
-        pos = {idx: pos[idx][:2] for idx in range(len(pos))}
+        atoms, pos = self._get_visualize_param()
 
         if color == "jmol":
             coloring = jmol_colors

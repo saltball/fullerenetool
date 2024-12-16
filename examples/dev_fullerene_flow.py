@@ -7,6 +7,7 @@
 # 6. loop until no more addons (40)
 # 7. output all structures with addons and energies
 
+from pathlib import Path
 from typing import List
 
 import ase
@@ -24,6 +25,7 @@ from dflow import (
     argo_len,
     argo_sequence,
     set_config,
+    upload_artifact,
 )
 from dflow.python import OP, PythonOPTemplate, Slices, upload_packages
 
@@ -34,7 +36,7 @@ from fullerenetool.operator.flow.ops.fullerene.nonisomorphic_addon import (
     establish_parrel_generate_nonisomorphic_addon_steps,
 )
 from fullerenetool.operator.flow.ops.fullerene.utils import GatherEnergies, IsomerSort
-from fullerenetool.operator.flow.ops.model.mace import CalculateEnergy
+from fullerenetool.operator.flow.ops.model.dp import DPCalculateEnergy
 
 # if "__file__" in locals():
 #     upload_packages.append(__file__)
@@ -51,21 +53,12 @@ simple_machine_template_config = {
         "k8s.aliyun.com/eci-spot-price-limit": "0.1",  # 设置最高出价
         "k8s.aliyun.com/eci-spot-duration": "0",  # 设置无保护期
         "k8s.aliyun.com/eci-spot-release-strategy": "api-evict",  # 释放策略
-    }
-}
-t4_gpu_machine_template_config = {
-    "annotations": {
-        "k8s.aliyun.com/eci-use-specs": "ecs.gn6i-c4g1.xlarge",
-        # 指定vCPU和内存，仅支持2 vCPU及以上规格
-        "k8s.aliyun.com/eci-spot-strategy": "SpotWithPriceLimit",  # 采用系统自动出价，跟随当前市场实际价格
-        "k8s.aliyun.com/eci-spot-price-limit": "3.0",  # 设置最高出价
-        "k8s.aliyun.com/eci-spot-duration": "0",  # 设置无保护期
-        "k8s.aliyun.com/eci-spot-release-strategy": "api-evict",  # 释放策略
+        "k8s.aliyun.com/eci-fail-strategy": "fail-back",
     }
 }
 gpu_machine_template_config = {
     "annotations": {
-        "k8s.aliyun.com/eci-use-specs": "ecs.gn6i-c4g1.xlarge,ecs.gn7i-c8g1.2xlarge",
+        "k8s.aliyun.com/eci-use-specs": "ecs.gn6e-c12g1.3xlarge,ecs.gn7i-c8g1.2xlarge",
         # 指定vCPU和内存，仅支持2 vCPU及以上规格
         "k8s.aliyun.com/eci-spot-strategy": "SpotWithPriceLimit",  # 采用系统自动出价，跟随当前市场实际价格
         "k8s.aliyun.com/eci-spot-price-limit": "3.0",  # 设置最高出价
@@ -73,7 +66,8 @@ gpu_machine_template_config = {
         "k8s.aliyun.com/eci-spot-release-strategy": "api-evict",  # 释放策略
     }
 }
-IMAGE = "registry-vpc.cn-heyuan.aliyuncs.com/xjtu-icp/fullerenetool:2024-10-24-00-38-18"
+IMAGE = "registry.cn-heyuan.aliyuncs.com/xjtu-icp/fullerenetool:2024-10-24-00-38-18"
+DP_IMAGE = "registry-vpc.us-east-1.aliyuncs.com/xjtu-icp/deepmd-kit:3.0.0-cuda126-2024-11-27-12-03-56"
 
 
 @OP.function
@@ -90,6 +84,7 @@ def schedule_next(
 
 def add_exo_steps(
     addon_max,
+    model_file,
     simple_machine_template_config=simple_machine_template_config,
     gpu_machine_template_config=gpu_machine_template_config,
     group_size=100,
@@ -140,8 +135,8 @@ def add_exo_steps(
     energy_step = Step(
         name="energy-step",
         template=PythonOPTemplate(
-            CalculateEnergy,
-            image=image,
+            DPCalculateEnergy,
+            image=DP_IMAGE,
             slices=Slices(
                 input_artifact=[
                     "atoms_file",
@@ -160,7 +155,8 @@ def add_exo_steps(
             "optimize": True,
         },
         artifacts={
-            "atoms_file": candidategraph_list_step.outputs.artifacts["atoms_file_list"]
+            "atoms_file": candidategraph_list_step.outputs.artifacts["atoms_file_list"],
+            "model_file": upload_artifact(model_file),
         },
         key="energy-step",
         with_sequence=argo_sequence(
@@ -258,6 +254,7 @@ def run(
     flow_name,
     fulleren_init: FullereneCage,
     addon: DerivativeGroup,
+    model_file: Path,
     addon_start: int = 0,
     start_idx_list: List[List[int]] = [[]],
     addon_max: int = 40,
@@ -284,6 +281,7 @@ def run(
         name="addon-step",
         template=add_exo_steps(
             addon_max=addon_max,
+            model_file=model_file,
             simple_machine_template_config=simple_machine_template_config,
             gpu_machine_template_config=gpu_machine_template_config,
             group_size=group_size,
@@ -313,10 +311,30 @@ if __name__ == "__main__":
     C60 = molecule("C60")
     addon_mol = DerivativeGroup(
         atoms=ase.Atoms(
-            "XOH",
-            [[0.5, 0.5, 0.0], [0, 0, 0], [0, 0, 1.4]],
+            "XH",
+            [
+                [0.5, 0.5, 0.0],
+                [0, 0, 0],
+                #  [0, 0, 1.4]
+            ],
         ),
-        graph=nx.from_numpy_array(np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]])),
+        graph=nx.from_numpy_array(
+            np.array(
+                [
+                    [
+                        0,
+                        1,
+                        #  0
+                    ],
+                    [
+                        1,
+                        0,
+                        #  1
+                    ],
+                    # [0, 1, 0]
+                ]
+            )
+        ),
         addon_atom_idx=0,
     )
     fulleren_init = FullereneCage(C60)
@@ -332,11 +350,12 @@ if __name__ == "__main__":
         ),
         fulleren_init,
         addon_mol,
+        model_file="model.ckpt.pt",
         addon_start=0,
         start_idx_list=[[]],
         group_size=250,
         generate_addons_group_size=20,
-        addon_max=20,
+        addon_max=12,
         addon_step=1,
         pick_first_n=50,
         # addon_bond_length=1.4

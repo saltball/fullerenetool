@@ -88,7 +88,7 @@ def generate_addons_and_filter(
     assert (
         len(addons_list) == addon_num
     ), "The number of addons must be equal to the number of addon_site_idx"
-    candidate_sites = fullerene_dev.addon_sites
+    candidate_sites = fullerene_dev.addon_sites_candidate
     z_labels = "".join([str(i) for i in cage.node_elements])
     candidate_pairs = [[] for _ in range(addon_num)]
     candidate_graphs = [[] for _ in range(addon_num)]

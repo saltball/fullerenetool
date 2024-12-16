@@ -9,7 +9,8 @@ from dflow import (
     Outputs,
     Step,
     Steps,
-    argo_range,
+    argo_len,
+    argo_sequence,
 )
 from dflow.python import OP, Artifact, PythonOPTemplate, Slices
 
@@ -115,6 +116,8 @@ def CalculationSteps(
                     "log",
                     "time_log_path",
                 ],
+                group_size=group_size,
+                pool_size=1,
             ),
             **run_template_config,
         ),
@@ -128,7 +131,9 @@ def CalculationSteps(
         },
         key=f"run-{name}",
         executor=executor,
-        with_param=argo_range(pre_step.outputs.parameters["task_num"]),
+        with_sequence=argo_sequence(
+            argo_len(pre_step.outputs.parameters["task_name_list"])
+        ),
     )
     calculation_steps.add(run_step)
     additional_steps = []
