@@ -6,6 +6,28 @@ from ase.optimize.lbfgs import LBFGS
 from dflow.python import OP, OPIO, Artifact, BigParameter, OPIOSign
 
 
+class DPSingletonManager:
+    _instances = {}
+
+    @classmethod
+    def get_dp_calculator(cls, model_path):
+        if model_path not in cls._instances:
+            from deepmd.calculator import DP
+
+            print(f"Loading DP model from {model_path}...")
+            cls._instances[model_path] = DP(model_path)
+        return cls._instances[model_path]
+
+    @classmethod
+    def clear_instance(cls, model_path=None):
+        """Optional: Clear the instance for a specific model or all models."""
+        if model_path:
+            if model_path in cls._instances:
+                del cls._instances[model_path]
+        else:
+            cls._instances.clear()
+
+
 class DPCalculateEnergy(OP):
     def __init__(self):
         pass
@@ -37,7 +59,6 @@ class DPCalculateEnergy(OP):
         op_in: OPIO,
     ) -> OPIO:
         from ase.io.extxyz import read_extxyz
-        from deepmd.calculator import DP
 
         from fullerenetool.logger import logger
 
@@ -47,7 +68,7 @@ class DPCalculateEnergy(OP):
 
         # atoms_string = io.StringIO()
         st_time = time.perf_counter()
-        atoms.calc = DP(op_in["model_file"])
+        atoms.calc = DPSingletonManager.get_dp_calculator(op_in["model_file"])
         if optimize:
             opt = LBFGS(atoms)
             opt.run(fmax=0.01)

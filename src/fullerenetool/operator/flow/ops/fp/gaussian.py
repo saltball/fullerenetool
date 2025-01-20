@@ -1,11 +1,13 @@
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from dflow.python import OP, Artifact, BigParameter
 from dflow.utils import run_command as dflow_run_command
 from dflow.utils import set_directory
+
+from fullerenetool.logger import logger
 
 
 @dataclass
@@ -88,6 +90,7 @@ class GaussianInputBlock:
         charge=None,
         additionals=None,
         atoms=None,
+        fragments=None,
     ):
         self._link0 = link0 if link0 is not None else GaussianLink0()
         self._input = {
@@ -98,6 +101,7 @@ class GaussianInputBlock:
             "charge": charge,
             "atoms": atoms,
             "additionals": additionals if additionals else [],
+            "fragments": fragments,
         }
 
     @property
@@ -128,6 +132,10 @@ class GaussianInputBlock:
     def additionals(self):
         return self._input["additionals"]
 
+    @property
+    def fragments(self):
+        return self._input["fragments"]
+
     @staticmethod
     def read_inputf(input_file):
         if isinstance(input_file, str):
@@ -141,12 +149,16 @@ class GaussianInputBlock:
         flag_additionals = False
 
         _link0 = GaussianLink0()
+
+        atom_string_pattern = r"(?P<atom>[A-Z][a-z]?)(\(fragment=(?P<num>\d+)\))?"
+
         _route_line = "#"
         title = ""
         multiplicity = 1
         charge = 0
         atoms = []
         additionals = []
+        fragments = []
 
         line = next(input_lines)
         try:
@@ -178,7 +190,12 @@ class GaussianInputBlock:
                     # atom lines
                     line = next(input_lines)
                     while len(line.strip()) != 0:
-                        atoms.append(line.split())
+                        line = line.split()
+                        line_0_match = re.search(atom_string_pattern, line[0])
+                        if line_0_match.group("num"):
+                            line[0] = line_0_match.group("atom")
+                            fragments.append(line_0_match.group("num"))
+                        atoms.append(line)
                         line = next(input_lines)
                     flag_mole = True
                 # additionals, the end blank line has been read,
@@ -200,19 +217,30 @@ class GaussianInputBlock:
                 "charge": charge,
                 "atoms": atoms,
                 "additionals": additionals,
+                "fragments": fragments,
             }
         )
 
     @staticmethod
-    def _generate_mole_block(system):
+    def _generate_mole_block(system, fragments=None):
         """generate molecule block from dpdata.System"""
         atom_names = system["atom_names"]
         atom_types = system["atom_types"]
         mole = ""
-        for atom_type, positions in zip(
-            [atom_names[atom_type] for atom_type in atom_types], system["coords"][0]
+        for inum, (atom_type, positions) in enumerate(
+            zip(
+                [atom_names[atom_type] for atom_type in atom_types], system["coords"][0]
+            )
         ):
-            mole += f"{atom_type} {positions[0]:f} {positions[1]:f} {positions[2]:f}\n"
+            if fragments:
+                mole += (
+                    f"{atom_type}(fragment={fragments[inum]:d}) {positions[0]:f}"
+                    + f"{positions[1]:f} {positions[2]:f}\n"
+                )
+            else:
+                mole += (
+                    f"{atom_type} {positions[0]:f} {positions[1]:f} {positions[2]:f}\n"
+                )
         return mole
 
     def _generate_input_block(
@@ -224,6 +252,7 @@ class GaussianInputBlock:
         route=None,
         multiplicity=None,
         charge=None,
+        fragments=None,
         additional_lines=None,
     ):
         """generate input block from dpdata.System"""
@@ -261,41 +290,62 @@ class GaussianInputBlock:
                 - charge
             ) % 2 + 1
         # check multiplicity and charge
-        if (
-            sum([Element(atom_names[atom_type]).Z for atom_type in atom_types]) - charge
-        ) % 2 != 0 and multiplicity % 2 == 1:
-            raise ValueError(
-                f"""For open-shell system, multiplicity must be even, got {
-                    multiplicity}."""
-            )
-        elif (
-            sum([Element(atom_names[atom_type]).Z for atom_type in atom_types]) - charge
-        ) % 2 == 0 and multiplicity % 2 != 1:
-            raise ValueError(
-                f"""For closed-shell system, multiplicity must be odd, got {
-                    multiplicity}."""
-            )
+        if isinstance(multiplicity, int) and isinstance(charge, int):
+            if (
+                sum([Element(atom_names[atom_type]).Z for atom_type in atom_types])
+                - charge
+            ) % 2 != 0 and multiplicity % 2 == 1:
+                raise ValueError(
+                    f"""For open-shell system, multiplicity must be even, got {
+                        multiplicity}."""
+                )
+            elif (
+                sum([Element(atom_names[atom_type]).Z for atom_type in atom_types])
+                - charge
+            ) % 2 == 0 and multiplicity % 2 != 1:
+                raise ValueError(
+                    f"""For closed-shell system, multiplicity must be odd, got {
+                        multiplicity}."""
+                )
         # mole
-        mole_block = self._generate_mole_block(system)
+        mole_block = self._generate_mole_block(system, fragments=fragments)
         # additionals
         additionals = (
             self._input["additionals"] if additional_lines is None else additional_lines
         )
         if additionals is None:
             additionals = []
-
-        return "\n".join(
-            [
-                link0_block,
-                route,
-                "",
-                title,
-                "",
-                f"{charge} {multiplicity}",
-                mole_block,
-                "\n".join(additionals),
-            ]
-        )
+        if isinstance(charge, int):
+            return "\n".join(
+                [
+                    link0_block,
+                    route,
+                    "",
+                    title,
+                    "",
+                    f"{charge} {multiplicity}",
+                    mole_block,
+                    "\n".join(additionals),
+                ]
+            )
+        else:
+            charge_and_multiplicity_line = ""
+            for i, (c, m) in enumerate(zip(charge, multiplicity)):
+                charge_and_multiplicity_line += f"{c} {m}"
+                if i != len(charge) - 1:
+                    charge_and_multiplicity_line += " "
+            return "\n".join(
+                [
+                    link0_block,
+                    route,
+                    "",
+                    title,
+                    "",
+                    f"{charge_and_multiplicity_line}",
+                    mole_block,
+                    "\n".join(additionals),
+                ]
+            )
 
     def update_input(
         self,
@@ -306,6 +356,7 @@ class GaussianInputBlock:
         route=None,
         multiplicity=None,
         charge=None,
+        fragments=None,
         additional_lines=None,
     ):
         if additional_lines is None:
@@ -316,7 +367,8 @@ class GaussianInputBlock:
             "title": title,
             "multiplicity": multiplicity,
             "charge": charge,
-            "atoms": self._generate_mole_block(system),
+            "atoms": self._generate_mole_block(system, fragments),
+            "fragments": fragments,
             "additionals": (
                 additional_lines if len(additional_lines) else self.additionals
             ),
@@ -333,6 +385,7 @@ class GaussianInputBlock:
         multiplicity=None,
         charge=None,
         additional_lines=None,
+        fragments=None,
     ):
         """write input file from dpdata.System"""
         result_input = self._generate_input_block(
@@ -342,6 +395,7 @@ class GaussianInputBlock:
             route=route,
             multiplicity=multiplicity,
             charge=charge,
+            fragments=fragments,
             additional_lines=additional_lines,
         )
         Path(input_path).write_text(result_input)
@@ -352,13 +406,14 @@ def generate_gaussian_input(
     *,
     job_name,
     calculation_system,
-    charge: int = None,
-    multiplicity: int = None,
+    charge: Union[int, List] = None,
+    multiplicity: Union[int, List] = None,
     route: Optional[str] = None,
     cpu: Optional[str] = None,
     nproc: Optional[str] = None,
     chk: Optional[str] = None,
     mem: Optional[str] = None,
+    fragments: Optional[List] = None,
     additionals: Optional[List[str]] = None,
 ):
     if additionals is None:
@@ -382,43 +437,68 @@ def generate_gaussian_input(
         route=gaussian_input.route if route is None else route,
         multiplicity=multiplicity,
         charge=charge,
+        fragments=fragments,
         additional_lines=additionals,
     )
     return gaussian_input
 
 
-@OP.function
-def prepGaussianCalculation(
-    calculation_system: BigParameter("dpdata.System"),
-    input_obj: BigParameter(GaussianInputBlock),
-) -> {"input_dir": Artifact(List[Path]), "task_num": int, "task_name_list": List[str]}:
-    result_dir = []
-    task_num = len(calculation_system)
-    task_name_list = []
-    for work_idx, calculation_sys in enumerate(calculation_system):
-        job_name = "gaussian_task_{:0{width}}".format(
-            work_idx,
-            width=len(str(task_num)) + 1,
-        )
-        work_dir = Path(job_name)
-        with set_directory(work_dir, mkdir=True):
-            input_obj.write_input(
-                input_path="{}.gjf".format(job_name),
-                system=calculation_sys,
-                title=job_name,
-                link0=input_obj.link0,
-                route=input_obj.route,
-                multiplicity=input_obj.multiplicity,
-                charge=input_obj.charge,
-                additional_lines=input_obj.additionals,
+class prepGaussianCalculation(OP):
+    @classmethod
+    def get_input_sign(cls):
+        return {
+            "calculation_system": BigParameter("dpdata.System"),
+            "input_obj": BigParameter(GaussianInputBlock),
+            "optional_files": Artifact(List[Path], optional=True),
+        }
+
+    @classmethod
+    def get_output_sign(cls):
+        return {
+            "input_dir": Artifact(List[Path]),
+            "task_num": int,
+            "task_name_list": List[str],
+        }
+
+    @OP.exec_sign_check
+    def execute(self, op_in):
+        calculation_system = op_in["calculation_system"]
+        input_obj = op_in["input_obj"]
+        optional_files = op_in.get("optional_files", [])
+        import shutil
+
+        result_dir = []
+        task_num = len(calculation_system)
+        task_name_list = []
+        for work_idx, calculation_sys in enumerate(calculation_system):
+            job_name = "gaussian_task_{:0{width}}".format(
+                work_idx,
+                width=len(str(task_num)) + 1,
             )
-        result_dir.append(work_dir)
-        task_name_list.append(job_name)
-    return {
-        "input_dir": result_dir,
-        "task_num": task_num,
-        "task_name_list": task_name_list,
-    }
+            work_dir = Path(job_name)
+            with set_directory(work_dir, mkdir=True):
+                input_obj.write_input(
+                    input_path="{}.gjf".format(job_name),
+                    system=calculation_sys,
+                    title=job_name,
+                    link0=input_obj.link0,
+                    route=input_obj.route,
+                    multiplicity=input_obj.multiplicity,
+                    charge=input_obj.charge,
+                    fragments=input_obj.fragments,
+                    additional_lines=input_obj.additionals,
+                )
+                if optional_files:
+                    for file in optional_files:
+                        logger.info("copying {} to {}".format(file, work_dir))
+                        shutil.copy(file, ".")
+            result_dir.append(work_dir)
+            task_name_list.append(job_name)
+        return {
+            "input_dir": result_dir,
+            "task_num": task_num,
+            "task_name_list": task_name_list,
+        }
 
 
 @OP.function
@@ -429,6 +509,7 @@ def runGaussianCalculation(
     time_benchmark: bool,
 ) -> {
     "output_dir": Artifact(Path),
+    "chk": Artifact(Path),
     "log": Artifact(Path),
     "time_log_path": Artifact(Path),
 }:
@@ -449,9 +530,11 @@ def runGaussianCalculation(
         shell=True,
         interactive=False,
         raise_error=False,
+        print_oe=True,
     )
     return {
         "output_dir": Path(input_dir),
+        "chk": list(input_dir.glob("*.chk"))[0],
         "log": Path("log"),
         "time_log_path": Path(time_log_path),
     }

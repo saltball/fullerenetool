@@ -312,6 +312,8 @@ def establish_parrel_generate_nonisomorphic_addon_steps(
         with_sequence=argo_sequence(
             argo_len(steps.inputs.parameters["start_idx_list"])
         ),
+        key="generate-nonisomorphic-addon-%s-%s"
+        % (steps.inputs.parameters["addon_start"], "{{item}}"),
     )
     steps.add(generate_nonisomorphic_addon_step)
     gather_nonisomorphic_addon_step = Step(
@@ -344,6 +346,7 @@ def establish_parrel_generate_nonisomorphic_addon_steps(
                 ]
             ),
         },
+        key="gather-nonisomorphic-addon-%s" % (steps.inputs.parameters["addon_start"]),
     )
     steps.add(gather_nonisomorphic_addon_step)
     steps.outputs.parameters["candidategraph_list"].value_from_parameter = (
