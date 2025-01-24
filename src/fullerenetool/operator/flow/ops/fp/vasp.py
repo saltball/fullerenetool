@@ -22,7 +22,7 @@ def generate_vasp_input(
     ispin=1,
     ismear=0,
     sigma=0.05,
-    lorbit=11,
+    lorbit=None,
     lmaxmix=2,
     encut=500,
     ediff=1.000000e-06,
@@ -56,24 +56,24 @@ ISPIN = {ispin}
 LMAXMIX = {lmaxmix}
 
 LASPH = .TRUE.
-LORBIT = {lorbit}
 
 #File to write
 LCHARG=F
 LWAVE=F
 
 #Make it faster
-NCORE = {ncore}
-NPAR = {npar}
 LREAL=A
 """
+    if lorbit is not None:
+        vasp_input_str += f"LORBIT = {lorbit}\n"
+    if ncore is not None:
+        vasp_input_str += f"NCORE = {ncore}\n"
+    if npar is not None:
+        vasp_input_str += f"NPAR = {npar}\n"
     if kpar is not None:
-        if kgamma and kpar != 1:
-            raise ValueError("kgamma and kpar cannot be set at the same time")
-        vasp_input_str += f"KPAR = {kpar}\nKGAMMA = False\n"
-    else:
-        if kgamma:
-            vasp_input_str += "KGAMMA = True\n"
+        vasp_input_str += f"KPAR = {kpar}\n"
+    if kgamma:
+        vasp_input_str += "KGAMMA = .TRUE.\n"
     if ion_relax is not None:
         vasp_input_str += f"""#Ionic parameters
 IBRION = 2

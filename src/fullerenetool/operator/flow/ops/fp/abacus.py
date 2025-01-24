@@ -24,6 +24,7 @@ def generate_abacus_input(
     upf_map: Optional[dict],
     orb_files: Optional[dict] = None,
     relax_nmax=None,
+    **kwargs,
 ):
     input_script = f"""INPUT_PARAMETERS
 calculation {calculation}
@@ -44,6 +45,8 @@ kspacing {kspacing/1.8897261246257702}
 
     if relax_nmax is not None:
         input_script += f"relax_nmax {relax_nmax}"
+    for key, value in kwargs.items():
+        input_script += f"{key} {value}\n"
     Path(input_path).write_text(input_script)
     abacus_inputs = AbacusInputs(
         Path(input_path), pp_files=upf_map, orb_files=orb_files
@@ -117,7 +120,7 @@ def runAbacusCalculation(
     command = f"{command} | tee log"
     if time_benchmark:
         command = f"""echo START: $(date "+%Y-%m-%d %H:%M:%S")>>\
-            {time_log_path.as_posix()} && \
+            {time_log_path.as_posix()} && {command} &&\
             echo END: $(date "+%Y-%m-%d %H:%M:%S")>>{time_log_path.as_posix()}"""
     ret, out, err = dflow_run_command(
         command, try_bash=True, shell=True, interactive=False, print_oe=True
@@ -126,8 +129,10 @@ def runAbacusCalculation(
     result_dir.mkdir(exist_ok=True)
     shutil.copy("INPUT", result_dir / "INPUT")
     shutil.copy("STRU", result_dir / "STRU")
-    shutil.copy("log", result_dir / "log")
-    shutil.copytree("OUT.ABACUS", result_dir / "OUT.ABACUS")
+    if os.path.exists("log"):
+        shutil.copy("log", result_dir / "log")
+    if os.path.exists("OUT.ABACUS"):
+        shutil.copytree("OUT.ABACUS", result_dir / "OUT.ABACUS")
     return {
         "output_dir": result_dir,
         "log": Path("log"),
