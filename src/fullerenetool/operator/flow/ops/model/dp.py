@@ -1,8 +1,6 @@
 import time
 from pathlib import Path
 
-from ase.io.extxyz import write_extxyz  # 假设这是写入 extxyz 文件的函数
-from ase.optimize.lbfgs import LBFGS
 from dflow.python import OP, OPIO, Artifact, BigParameter, OPIOSign
 
 
@@ -59,6 +57,8 @@ class DPCalculateEnergy(OP):
         op_in: OPIO,
     ) -> OPIO:
         from ase.io.extxyz import read_extxyz
+        from ase.io.extxyz import write_extxyz
+        from ase.optimize.lbfgs import LBFGS
 
         from fullerenetool.logger import logger
 
