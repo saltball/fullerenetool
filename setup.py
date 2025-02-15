@@ -7,6 +7,8 @@ PyScaffold helps you to put up the scaffold of your new Python project.
 Learn more under: https://pyscaffold.org/
 """
 
+import os
+
 from setuptools import find_packages, setup
 
 try:
@@ -22,12 +24,25 @@ try:
     from Cython.Build import cythonize
     from setuptools import Extension
 
+    tbb_lib_path = os.path.join(os.getenv("CONDA_PREFIX"), "lib")
+    tbb_include_path = os.path.join(os.getenv("CONDA_PREFIX"), "include")
+
     extensions = [
         Extension(
             "fullerenetool.algorithm.dual_graph",
             ["src/fullerenetool/algorithm/dual_graph.pyx"],
             include_dirs=[numpy.get_include()],
             language="c++",
+            extra_compile_args=["-std=c++17", "-O3"],
+        ),
+        Extension(
+            "fullerenetool.algorithm.find_cycles",
+            ["src/fullerenetool/algorithm/find_cycles.pyx"],
+            include_dirs=[numpy.get_include(), tbb_include_path],
+            library_dirs=[tbb_lib_path],
+            libraries=["tbb", "mpi", "boost_timer", "boost_thread"],
+            language="c++",
+            extra_compile_args=["-O3"],
         ),
     ]
     setup(

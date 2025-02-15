@@ -38,7 +38,11 @@ cdef class py_graph_circle_finder:
     # cdef void * _data_vector_dual_edge
 
     def __cinit__(self, int edge_num, long[:,:] edge_origin):
-        self.c_finder = new graph_circle_finder(edge_num, &edge_origin[0,0])
+        try:
+            self.c_finder = new graph_circle_finder(edge_num, &edge_origin[0,0])
+        except Exception:
+            print("Error: graph_circle_finder __cinit__")
+            raise
 
     def __dealloc__(self):
         del self.c_finder

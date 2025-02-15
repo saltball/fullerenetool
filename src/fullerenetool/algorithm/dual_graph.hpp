@@ -121,7 +121,6 @@ namespace dual_graph
     int planar_flag = 0;
     graph_circle_finder(const int edge_num, const long *edge_origin)
     {
-      graph g;
       for (int i = 0; i < edge_num; i++)
       {
         add_edge(edge_origin[i * 2 + 0], edge_origin[i * 2 + 1], g);
@@ -151,7 +150,7 @@ namespace dual_graph
       else
       {
         planar_flag = -1;
-        exit(-1);
+        throw std::runtime_error("Graph is not planar");
       }
     }
 
