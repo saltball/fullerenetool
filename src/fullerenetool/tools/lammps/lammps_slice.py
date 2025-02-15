@@ -12,6 +12,7 @@ def parse_lammps_dump(filename):
     num_atoms = []
     box_bounds = []
 
+    tbar = tqdm()
     with open(filename, "r") as file:
         while True:
             line = file.readline()
@@ -19,6 +20,7 @@ def parse_lammps_dump(filename):
                 break  # EOF
 
             if line.startswith("ITEM: TIMESTEP"):
+                tbar.update(1)
                 num_steps.append(int(file.readline().strip()))
                 continue
 

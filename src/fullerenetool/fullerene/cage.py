@@ -6,7 +6,11 @@ import ase
 import networkx as nx
 import numpy as np
 from ase.neighborlist import NeighborList, natural_cutoffs
-from ase.optimize.optimize import DEFAULT_MAX_STEPS
+
+try:
+    from ase.optimize.optimize import DEFAULT_MAX_STEPS
+except ImportError:
+    DEFAULT_MAX_STEPS = 6000
 
 from fullerenetool.fullerene import BaseAbstartFullerene
 from fullerenetool.logger import logger
