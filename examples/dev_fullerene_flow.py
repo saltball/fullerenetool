@@ -58,16 +58,16 @@ simple_machine_template_config = {
 }
 gpu_machine_template_config = {
     "annotations": {
-        "k8s.aliyun.com/eci-use-specs": "ecs.gn6e-c12g1.3xlarge,ecs.gn7i-c8g1.2xlarge",
+        "k8s.aliyun.com/eci-use-specs": "ecs.gn6i-c4g1.xlarge,ecs.gn6e-c12g1.3xlarge,ecs.gn7i-c8g1.2xlarge",
         # 指定vCPU和内存，仅支持2 vCPU及以上规格
         "k8s.aliyun.com/eci-spot-strategy": "SpotWithPriceLimit",  # 采用系统自动出价，跟随当前市场实际价格
-        "k8s.aliyun.com/eci-spot-price-limit": "3.0",  # 设置最高出价
+        "k8s.aliyun.com/eci-spot-price-limit": "2.5",  # 设置最高出价
         "k8s.aliyun.com/eci-spot-duration": "0",  # 设置无保护期
         "k8s.aliyun.com/eci-spot-release-strategy": "api-evict",  # 释放策略
     }
 }
-IMAGE = "registry.cn-heyuan.aliyuncs.com/xjtu-icp/fullerenetool:2024-10-24-00-38-18"
-DP_IMAGE = "registry-vpc.us-east-1.aliyuncs.com/xjtu-icp/deepmd-kit:3.0.0-cuda126-2024-11-27-12-03-56"
+IMAGE = "registry-vpc.cn-heyuan.aliyuncs.com/xjtu-icp/fullerenetool:2024-10-24-00-38-18"
+DP_IMAGE = "registry-vpc.cn-heyuan.aliyuncs.com/xjtu-icp/deepmd-kit:latest"
 
 
 @OP.function
@@ -129,7 +129,7 @@ def add_exo_steps(
             "start_idx_list": add_steps.inputs.parameters["start_idx_list"],
             "add_num": add_steps.inputs.parameters["add_num"],
         },
-        key="candidategraph-step",
+        key="candidategraph-step-%s" % add_steps.inputs.parameters["addon_start"],
     )
     add_steps.add(candidategraph_list_step)
     energy_step = Step(
@@ -158,7 +158,8 @@ def add_exo_steps(
             "atoms_file": candidategraph_list_step.outputs.artifacts["atoms_file_list"],
             "model_file": upload_artifact(model_file),
         },
-        key="energy-step",
+        key="energy-step-%s-%s"
+        % (add_steps.inputs.parameters["addon_start"], "{{item}}"),
         with_sequence=argo_sequence(
             argo_len(
                 candidategraph_list_step.outputs.parameters["candidategraph_list"]
@@ -182,7 +183,7 @@ def add_exo_steps(
         artifacts={
             "calculated_atoms_xyz": energy_step.outputs.artifacts["atoms_xyz"],
         },
-        key="gather-energies",
+        key="gather-energies-%s" % add_steps.inputs.parameters["addon_start"],
     )
     add_steps.add(gather_energies)
     sort = Step(
@@ -207,6 +208,7 @@ def add_exo_steps(
                 "calculated_atoms_xyz"
             ],
         },
+        key="sort-%s" % add_steps.inputs.parameters["addon_start"],
     )
     add_steps.add(sort)
 
@@ -218,6 +220,7 @@ def add_exo_steps(
             "addon_max": addon_max,
             "add_num": add_steps.inputs.parameters["add_num"],
         },
+        # key="schedule-next-%s" % add_steps.inputs.parameters["addon_start"]
     )
     add_steps.add(schedule_next_step)
 
@@ -265,6 +268,7 @@ def run(
     pick_first_n=0,
     gpu_machine_template_config=gpu_machine_template_config,
     simple_machine_template_config=simple_machine_template_config,
+    reuse_step=None,
 ):
     """
     Args:
@@ -296,68 +300,72 @@ def run(
             "add_num": addon_step,
             "pick_first_n": pick_first_n,
         },
+        # key="addon-step-%s" % addon_start
     )
     wf.add(addon_step)
 
-    wf.submit()
+    wf.submit(reuse_step=reuse_step)
 
 
 if __name__ == "__main__":
+    import os
+    from pathlib import Path
+    from pprint import pprint
+
     import pynauty as pn
     from ase.build import molecule
+    from ase.io.extxyz import read_extxyz
+
+    os.chdir(Path(__file__).parent)
 
     from fullerenetool.operator.graph import nx_to_nauty
 
-    C60 = molecule("C60")
+    # fullerene_atoms = molecule("C60")
+    fullerene_atoms = list(
+        read_extxyz(Path("fullerene_xyz/C70_000008149opt.xyz").open("r"))
+    )[-1]
     addon_mol = DerivativeGroup(
         atoms=ase.Atoms(
-            "XH",
-            [
-                [0.5, 0.5, 0.0],
-                [0, 0, 0],
-                #  [0, 0, 1.4]
-            ],
+            "XOH",
+            [[0.5, 0.5, 0.0], [0, 0, 0], [0, 0, 1.4]],
         ),
-        graph=nx.from_numpy_array(
-            np.array(
-                [
-                    [
-                        0,
-                        1,
-                        #  0
-                    ],
-                    [
-                        1,
-                        0,
-                        #  1
-                    ],
-                    # [0, 1, 0]
-                ]
-            )
-        ),
+        graph=nx.from_numpy_array(np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]])),
         addon_atom_idx=0,
     )
-    fulleren_init = FullereneCage(C60)
+    fulleren_init = FullereneCage(fullerene_atoms)
 
     canon_index = pn.canon_label(
         nx_to_nauty(fulleren_init.graph.graph, include_z_labels=False)
     )
 
-    fulleren_init = FullereneCage(C60[np.array(canon_index)])
+    fulleren_init = FullereneCage(fullerene_atoms[np.array(canon_index)])
+
+    reuse_step_list = []
+
+    # steps = Workflow(id="fullerene-dev-cage-c60-f-1bx13").query_step()
+    # for step in steps:
+    #     if step["key"] is not None:
+    #         reuse_step_list.append(step)
+    max_addon_num = 20
     run(
-        "fullerene-dev-{}".format(
-            (fulleren_init.name + "-" + addon_mol.name).lower().replace("_", "-")
+        "fullerene-c70-dev-max{}-{}".format(
+            max_addon_num,
+            (fulleren_init.name + "-" + addon_mol.name).lower().replace("_", "-"),
         ),
         fulleren_init,
         addon_mol,
-        model_file="model.ckpt.pt",
+        model_file="DPA2_medium_28_10M_rc0_MP_traj_v024_alldata_mixu.pth",
         addon_start=0,
-        start_idx_list=[[]],
-        group_size=250,
-        generate_addons_group_size=20,
-        addon_max=12,
+        start_idx_list=[
+            []
+            # list(range(29))
+        ],
+        group_size=300,
+        generate_addons_group_size=10,
+        addon_max=max_addon_num,
         addon_step=1,
-        pick_first_n=50,
+        pick_first_n=100,
         # addon_bond_length=1.4
         gpu_machine_template_config=gpu_machine_template_config,
+        reuse_step=reuse_step_list,
     )
