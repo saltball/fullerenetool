@@ -5,11 +5,13 @@
 #include <iostream>
 #include <unordered_set>
 #include <boost/config.hpp>
+#include <boost/graph/graph_traits.hpp>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/property_map/property_map.hpp>
 #include <boost/thread.hpp> // For hardware_concurrency
 
 #include <parmcb/config.hpp>
+#define PARMCB_LOGGING
 #include <parmcb/wrappers.hpp>
 #include <parmcb/parmcb.hpp>
 
@@ -20,26 +22,26 @@
 
 namespace cycle_finder
 {
-
     class graph_cycle_finder
     {
     public:
         // Constructor
-        graph_cycle_finder(int edge_num, const long *edges, int cores = 0);
+        graph_cycle_finder(int edge_num, const long *edges, int cores = 0, bool verbose = false);
 
         // Find and return cycles in the graph
         std::vector<std::vector<unsigned long>> find_and_print_cycles();
 
     private:
         typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::undirectedS, boost::no_property, boost::property<boost::edge_weight_t, double>> Graph;
-        typedef boost::graph_traits<Graph>::edge_descriptor EdgeDescriptor;
+        typedef boost::graph_traits<Graph>::edge_descriptor edge_descriptor;
 
         Graph g_;
         std::vector<std::vector<unsigned long>> cycles_;
+        bool verbose_; // Added verbose member variable
 
         void compute_minimum_cycle_basis();
-        void convert_cycles_to_python_format(const std::list<std::list<EdgeDescriptor>> &cpp_cycles);
-        std::vector<unsigned long> build_node_path(const std::list<EdgeDescriptor> &cycle_edges);
+        void convert_cycles_to_python_format(const std::list<std::list<edge_descriptor>> &cpp_cycles);
+        std::vector<unsigned long> build_node_path(const std::list<edge_descriptor> &cycle_edges);
         void set_global_tbb_concurrency(std::size_t cores = 0);
     };
 
@@ -49,19 +51,23 @@ namespace cycle_finder
         // Set the number of cores to use (can be replaced with command line arguments if needed)
         if (cores == 0)
         {
-            std::size_t cores = boost::thread::hardware_concurrency();
+            cores = boost::thread::hardware_concurrency();
         }
         parmcb::set_global_tbb_concurrency(cores);
-        std::cout << "[TBB]Using cores: " << cores << std::endl;
+        if (verbose_)
+        { // Use verbose to control logging
+            std::cout << "[TBB] Using cores: " << cores << std::endl;
+        }
 #endif
     }
 
-    graph_cycle_finder::graph_cycle_finder(int edge_num, const long *edges, int cores)
+    graph_cycle_finder::graph_cycle_finder(int edge_num, const long *edges, int cores, bool verbose)
+        : verbose_(verbose) // Initialize verbose member variable
     {
         // Initialize TBB concurrency settings
         if (cores == 0)
         {
-            std::size_t cores = boost::thread::hardware_concurrency();
+            cores = boost::thread::hardware_concurrency();
         }
         set_global_tbb_concurrency(cores);
 
@@ -70,33 +76,55 @@ namespace cycle_finder
         {
             boost::add_edge(edges[i * 2], edges[i * 2 + 1], 1.0, g_);
         }
+        if (verbose_)
+        { // Use verbose to control logging
+            std::cout << "[PARMCB]Added " << edge_num << " edges to the graph." << std::endl;
+        }
     }
 
     void graph_cycle_finder::compute_minimum_cycle_basis()
     {
-        typedef typename boost::property_map<Graph, boost::edge_weight_t>::type WeightMap;
-        WeightMap weight_map = boost::get(boost::edge_weight, g_);
+        std::list<std::list<edge_descriptor>> cycles_cpp;
 
-        std::list<std::list<EdgeDescriptor>> cycles_cpp;
+        if (verbose_)
+        { // Use verbose to control logging
+            std::cout << "[PARMCB]Computing minimum cycle basis..." << std::endl;
+        }
 
-        // double mcb_weight =
-        parmcb::mcb_sva_iso_trees_tbb(g_, weight_map, std::back_inserter(cycles_cpp));
+        std::cout << "Using MCB_SVA_SIGNED_TBB" << std::endl;
+        double mcb_weight = parmcb::mcb_sva_signed_tbb(g_, get(boost::edge_weight, g_), std::back_inserter(cycles_cpp));
+
+        std::cout << "MCB weight = " << mcb_weight << std::endl;
+
+        if (verbose_)
+        { // Use verbose to control logging
+            std::cout << "[PARMCB]Computed " << cycles_cpp.size() << " cycles." << std::endl;
+        }
 
         // Convert C++ cycles to Python format
         convert_cycles_to_python_format(cycles_cpp);
     }
 
-    void graph_cycle_finder::convert_cycles_to_python_format(const std::list<std::list<EdgeDescriptor>> &cpp_cycles)
+    void graph_cycle_finder::convert_cycles_to_python_format(const std::list<std::list<edge_descriptor>> &cpp_cycles)
     {
+        if (verbose_)
+        { // Use verbose to control logging
+            std::cout << "[PARMCB]Converting cycles to Python format..." << std::endl;
+        }
 
         for (const auto &cycle : cpp_cycles)
         {
             std::vector<unsigned long> cycle_py = build_node_path(cycle);
             cycles_.push_back(cycle_py);
         }
+
+        if (verbose_)
+        { // Use verbose to control logging
+            std::cout << "[PARMCB]Converted " << cycles_.size() << " cycles to Python format." << std::endl;
+        }
     }
 
-    std::vector<unsigned long> graph_cycle_finder::build_node_path(const std::list<EdgeDescriptor> &cycle_edges)
+    std::vector<unsigned long> graph_cycle_finder::build_node_path(const std::list<edge_descriptor> &cycle_edges)
     {
         std::vector<unsigned long> node_path;
         if (cycle_edges.empty())
@@ -155,7 +183,18 @@ namespace cycle_finder
 
     std::vector<std::vector<unsigned long>> graph_cycle_finder::find_and_print_cycles()
     {
+        if (verbose_)
+        { // Use verbose to control logging
+            std::cout << "[PARMCB]Finding and printing cycles..." << std::endl;
+        }
+
         compute_minimum_cycle_basis();
+
+        if (verbose_)
+        { // Use verbose to control logging
+            std::cout << "[PARMCB]Found " << cycles_.size() << " cycles." << std::endl;
+        }
+
         return cycles_;
     }
 
