@@ -157,7 +157,9 @@ def runOrcaCalculation(
     os.chdir(input_dir)
     time_log_path = Path(f"time_log.{job_name}")
     time_log_path.touch()
-    command = " ".join(['bash -lic "', command, f"{job_name}.inp", '"', "| tee log"])
+    command = " ".join(
+        ['bash -lic "', command, f"{job_name}.inp", '"', "2>&1 | tee log"]
+    )
     if time_benchmark:
         command = f"""echo START: $(date "+%Y-%m-%d %H:%M:%S")>>\
             {time_log_path.as_posix()} && {command} && echo END: \
