@@ -31,9 +31,17 @@ class BaseDerivativeFullerene(BaseAbstartFullerene):
         self.derivatives = self._get_derivatives()
         self.cage_graph = self._cage.graph
         self.cage_atom_index = []
-        for atom in self._atoms:
-            if atom in self._cage.atoms:
-                self.cage_atom_index.append(atom.index)
+        for atomidx, atom in enumerate(self._atoms):
+            if np.any(
+                np.all(
+                    np.isclose(
+                        atom.position,
+                        self._cage.atoms.positions,
+                    ),
+                    axis=1,
+                )
+            ):
+                self.cage_atom_index.append(atomidx)
         self.derivative_atom_index = [
             index
             for index in range(len(self._atoms))
@@ -216,7 +224,6 @@ class DerivativeGroup:
             addons_pos=dev_pos,
             addons_vec=dev_vec,
             addons_index=self.addon_atom_idx,
-            addons_conn_index=self.first_neighbor,
             shake_num=50,
             check=True,
         )
@@ -320,6 +327,7 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
             logger.info(
                 "The initial positions is less than the number of nodes:"
                 "{} < {}".format(len(init_pos), len(self.node_elements))
+                + ", so some atoms will be placed with optimal positions."
             )
             new_init_pos = np.zeros([len(self.node_elements), 3])
             new_init_pos[: len(init_pos), :] = init_pos
@@ -375,9 +383,10 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
                 use_gpu=use_gpu,
             )
             # add addons
+            cage = FullereneCage(atoms=cage_)
             derivated_atoms = BaseDerivativeFullerene(
-                atoms=cage_,
-                cage=FullereneCage(atoms=cage_),
+                atoms=cage.atoms,
+                cage=cage,
             )
             for derivation in self.addons:
                 derivated_atoms = derivation.addto(
@@ -414,10 +423,25 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
 
         from fullerenetool.fullerene.visualize.cage import planarity_graph_pos
 
-        pos = planarity_graph_pos(
-            FullereneCage(atoms),
+        cage_pos, project_func = planarity_graph_pos(
+            FullereneCage(atoms[self.cage_atom_index]),
+            return_project_matrix=True,
         )
-        pos = {idx: pos[idx][:2] for idx in range(len(pos))}
+        pos = {idx: cage_pos[idx][:2] for idx in range(len(cage_pos))}
+
+        addons_pos = atoms[
+            [i for i in range(len(atoms)) if i not in self.cage_atom_index]
+        ].positions
+
+        projected_addons_pos = project_func(addons_pos)
+
+        all_pos = {
+            **pos,
+            **{
+                idx + len(pos): projected_addons_pos[idx][:2]
+                for idx in range(len(projected_addons_pos))
+            },
+        }
 
         if color == "jmol":
             coloring = jmol_colors
@@ -427,9 +451,7 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
             coloring = color
         colors = [
             coloring[node_z]
-            for node_z in list(
-                nx.get_node_attributes(self.cage_graph.graph, "z").values()
-            )
+            for node_z in list(nx.get_node_attributes(self.graph, "z").values())
         ]
 
         title = "{} Cage Graph with Coloring in ase format".format(
@@ -441,7 +463,14 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
                 self.cage_graph.graph,
                 pos,
                 with_labels=True,
-                node_color=colors,
+                node_color=[
+                    (
+                        "b"
+                        if i not in self.addon_sites_candidate
+                        else colors[: len(pos)][i]
+                    )
+                    for i in range(len(pos))
+                ],
                 node_size=250,
             )
             nx.draw(
@@ -454,12 +483,13 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
                     )
                 ),
                 {
-                    i: pos[i]
-                    for i in pos
+                    i: all_pos[i]
+                    for i in range(len(all_pos))
                     if i >= self.cage_graph.graph.number_of_nodes()
                 },
                 with_labels=False,
-                node_color=coloring[len(self.cage_elements) :],
+                node_color=colors[len(self.cage_elements) :],
+                alpha=0.5,
             )
             plt.title(title)
             plt.tight_layout()
@@ -487,7 +517,7 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
                     for i in pos
                     if i >= self.cage_graph.graph.number_of_nodes()
                 },
-                with_labels=False,
+                with_labels=True,
                 node_color=coloring[len(self.cage_elements) :],
                 node_size=100,
                 ax=ax,
@@ -505,6 +535,7 @@ def addons_to_fullerene(
     cage: FullereneCage,
     cage_graph_adj: np.ndarray,
     addon_bond_length=None,
+    max_steps=500,
     traj=None,
 ):
     assert len(addons_list) == len(
@@ -539,7 +570,7 @@ def addons_to_fullerene(
     dev_mol = dev_graph.generate_atoms_with_addons(
         algorithm="cagethenaddons",
         init_pos=cage.atoms.positions,
-        max_steps=50,
+        max_steps=max_steps,
         check=False,
         traj="cagethenaddons_" + traj if traj else None,
     )

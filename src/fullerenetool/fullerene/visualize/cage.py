@@ -2,80 +2,137 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 
+from fullerenetool.fullerene.cage import FullereneCage
+
+
+def _create_projection_func(
+    center_full,
+    pro_radius,
+    mat_rotate_3d,
+    mat_rotate_2d,
+    diameter_full,
+    sphere_ratio,
+    parr_ratio,
+    center_circle,
+    project_direct,
+):
+    def project_positions(positions):
+        # 复制原始处理流程
+        centered = positions - center_full
+        pos_sphere = (
+            centered / np.linalg.norm(centered, axis=1)[:, None] * diameter_full
+        )
+
+        # 半球投影和平行投影计算
+        project_axis_s = hemisphere_projection_graph(
+            pro_radius, pos_sphere, center_circle
+        )
+        project_axis_p = parrallel_projection_graph(
+            pro_radius, pos_sphere, center_circle, project_direct
+        )
+
+        # 组合投影
+        pro_t = (
+            (-project_direct * project_axis_s).sum(-1)
+            - pro_radius
+            - (-project_direct * center_circle).sum(-1)
+        )
+        project_axis_sp = project_axis_s - pro_t[:, None] * -project_direct
+        project_axis_sp = (
+            sphere_ratio * project_axis_sp + parr_ratio * project_axis_p
+        ) / 2
+
+        # 应用旋转
+        rotated_3d = np.einsum("an,mn->am", project_axis_sp, mat_rotate_3d)
+        rotated_2d = rotated_3d.copy()
+        rotated_2d[:, :2] = np.einsum("an,nm->am", mat_rotate_2d, rotated_3d[:, :2].T).T
+        return rotated_2d
+
+    return project_positions
+
 
 def planarity_graph_pos(
     cage,
     sphere_ratio: float = 0.8,
     parr_ratio: float = 0.2,
     projection_point: int = 0,
+    return_project_matrix: bool = False,
 ):
     """
-    Draw fullerene planarity graph combinating parrallel and hemi-sphere projection.
+    Draw fullerene planarity graph combining parallel and hemi-sphere projection.
 
     Parameters
     ----------
     cage: FullereneCage
-        A planaritable graph of fullerene family.
-    sphere_ratio, parr_ratio:float
-        ratio to control graph deformation between projection of platform
-        and hemi-sphere.
-    projection_point:str
-        methods of choosing projection point
-        If set to None, it will use the geom-center of the first 6-member circle and
-        average distance away from fullerene center.
-        # TODO: Group Point method.
-    path:save to file
-        if set to None, no file will be saved.
+        A planarizable graph of fullerene family.
+    sphere_ratio, parr_ratio: float
+        Ratios to control graph deformation between projection
+        of platform and hemi-sphere.
+    projection_point: int
+        Index of the circle to use as the projection point.
+        If set to None, it will use the geom-center of the first 6-member circle
+        and average distance away from fullerene center.
+    return_project_matrix: bool
+        If True, return the projection matrix.
+
+    Returns
+    -------
+    np.ndarray
+        The projected matrix.
+    np.ndarray
+        The projection matrix. Only returned if return_project_matrix is True.
     """
-    center_full = np.average(cage.positions, axis=0)  # molecular geom-center
+
+    # Input validation
+    if not isinstance(cage, FullereneCage):
+        raise TypeError("cage must be an instance of FullereneCage")
+    if not (0 <= sphere_ratio <= 1) or not (0 <= parr_ratio <= 1):
+        raise ValueError("sphere_ratio and parr_ratio must be between 0 and 1")
+    if not isinstance(projection_point, int) and projection_point is not None:
+        raise TypeError("projection_point must be an integer or None")
+
+    # Calculate molecular geom-center
+    center_full = np.average(cage.positions, axis=0)
     centered_pos = cage.positions - center_full
-    # projection on a sphere to avoid extrem deformation of shell
-    diameter_full = max(
-        np.linalg.norm(centered_pos, axis=1)
-    )  # diameter of sphere to project first time
+
+    # Project on a sphere to avoid extreme deformation of shell
+    diameter_full = np.max(np.linalg.norm(centered_pos, axis=1))
     pos_sphere = (
-        (centered_pos) / np.linalg.norm(centered_pos, axis=1)[:, None] * diameter_full
+        centered_pos / np.linalg.norm(centered_pos, axis=1)[:, None] * diameter_full
     )
 
-    # TODO: Group Point method.
-    if 1:
-        circles = cage.circle_vertex_list
-        projection_point_flag = 0
-        circle_from = None
-        for circle in circles:
-            if projection_point >= 0:
-                if len(circle) == 6:
-                    if projection_point_flag == projection_point:
-                        circle_from = circle
-                        break
-                    else:
-                        projection_point_flag += 1
-            else:
-                if len(circle) == 5:
-                    if projection_point_flag - 1 == projection_point:
-                        circle_from = circle
-                        break
-                    else:
-                        projection_point_flag -= 1
-        if circle_from is None:
-            if projection_point >= 0:
-                raise RuntimeError(
-                    "No Pentagon found. Please Implement `projection_point` for "
-                    "`planarity_graph_draw` or `projection_circle_idx` for `draw` with "
-                    "`int`<0"
-                )
-        radius = np.average(np.linalg.norm(pos_sphere[circle_from], axis=1))
+    # Select projection point
+    circles = cage.circle_vertex_list
+    projection_point_flag = 0
+    circle_from = None
 
+    for circle in circles:
+        if len(circle) == 6:
+            if projection_point >= 0 and projection_point_flag == projection_point:
+                circle_from = circle
+                break
+            elif projection_point < 0 and projection_point_flag - 1 == projection_point:
+                circle_from = circle
+                break
+            projection_point_flag += 1 if projection_point >= 0 else -1
+
+    if circle_from is None:
+        raise RuntimeError(
+            "No suitable circle found for projection. Please check `projection_point`."
+        )
+
+    radius = np.average(np.linalg.norm(pos_sphere[circle_from], axis=1))
+
+    # Calculate center of the selected circle
     center_circle = np.average(centered_pos[circle_from], axis=0)
-    project_direct = (center_circle) / np.linalg.norm((center_circle))
+    project_direct = center_circle / np.linalg.norm(center_circle)
     center_circle = project_direct * radius
 
-    # get the projection
-    pro_radius = max(np.linalg.norm(pos_sphere - center_circle, axis=1))
+    # Get the projection
+    pro_radius = np.max(np.linalg.norm(pos_sphere - center_circle, axis=1))
     project_axis_s = hemisphere_projection_graph(
         pro_radius, pos_sphere, projection_from=center_circle
     )
-
     project_axis_p = parrallel_projection_graph(
         pro_radius,
         pos_sphere,
@@ -83,7 +140,7 @@ def planarity_graph_pos(
         project_direct_parrallel=project_direct,
     )
 
-    # projection from hemisphere to platform
+    # Projection from hemisphere to platform
     pro_t = (
         (-project_direct * project_axis_s).sum(-1)
         - pro_radius
@@ -92,30 +149,43 @@ def planarity_graph_pos(
     project_axis_sp = project_axis_s - pro_t[:, None] * -project_direct
     project_axis_sp = (sphere_ratio * project_axis_sp + parr_ratio * project_axis_p) / 2
 
-    # rotate to XoY
+    # Rotate to XoY
     mx, my, mz = project_direct
     axy = np.sqrt(mx * mx + my * my)
-    mat_rotate = np.array(
+    mat_rotate_3d = np.array(
         [[mx * mz / axy, my * mz / axy, -axy], [-my / axy, mx / axy, 0], [mx, my, mz]]
     )
-    project_axis_sp_r = np.einsum("an,mn->am", project_axis_sp, mat_rotate)
+    project_axis_sp_r = np.einsum("an,mn->am", project_axis_sp, mat_rotate_3d)
 
-    # make sure a parallel top edge
+    # Ensure a parallel top edge
     mx = project_axis_sp_r[:, 0]
     my = project_axis_sp_r[:, 1]
     mz = project_axis_sp_r[:, 2]
-    sorted = np.sort(project_axis_sp_r[:, 1])
-    originxyz1 = project_axis_sp_r[project_axis_sp_r[:, 1] == sorted[-1]]
-    originxyz2 = project_axis_sp_r[project_axis_sp_r[:, 1] == sorted[-2]]
+    sorted_my = np.sort(project_axis_sp_r[:, 1])
+    originxyz1 = project_axis_sp_r[project_axis_sp_r[:, 1] == sorted_my[-1]]
+    originxyz2 = project_axis_sp_r[project_axis_sp_r[:, 1] == sorted_my[-2]]
     topedge = originxyz2[:, :2] - originxyz1[:, :2]
     toporient = topedge / np.linalg.norm(topedge)
     topsin = float(toporient[:, 0])
     topcos = float(toporient[:, 1])
-    mat_rotate = np.array([[-topsin, -topcos], [topcos, -topsin]])
+    mat_rotate_2d = np.array([[-topsin, -topcos], [topcos, -topsin]])
     project_axis_sp_r[:, :2] = np.einsum(
-        "an,nm->am", mat_rotate, np.array([mx, my])
+        "an,nm->am", mat_rotate_2d, np.array([mx, my])
     ).transpose()
-    return project_axis_sp_r
+
+    # Combine rotation matrices to form the final projection matrix
+    projection_func = _create_projection_func(
+        center_full,
+        pro_radius,
+        mat_rotate_3d,
+        mat_rotate_2d,
+        diameter_full,
+        sphere_ratio,
+        parr_ratio,
+        center_circle,
+        project_direct,
+    )
+    return project_axis_sp_r, projection_func
 
 
 def planarity_graph_draw(

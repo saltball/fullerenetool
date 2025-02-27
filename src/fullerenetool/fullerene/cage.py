@@ -222,7 +222,10 @@ class BaseAbstactGraph(ABC):
         if not nx.is_planar(self.graph):
             raise ValueError(
                 "The graph is not planar, cannot be as a Cage, "
-                + "check the connectivity: {}".format(self.adjacency_matrix.tolist())
+                + "check the connectivity: {}\n".format(self.adjacency_matrix.tolist())
+                + " The neighbor numbers are: {}\n".format(
+                    self.adjacency_matrix.sum(axis=0)
+                )
             )
         if len(self.node_elements) != len(self.adjacency_matrix):
             raise ValueError(

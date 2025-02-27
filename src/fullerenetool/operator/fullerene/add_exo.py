@@ -85,12 +85,9 @@ def add_out_of_cage(
                 "[addoncage] addons_vec is not None, use ({})".format(addons_vec)
             )
             if addons_conn_index is None:
-                addons_conn_index = int(
-                    np.argsort(
-                        np.linalg.norm(
-                            addons.positions - addons.positions[addons_index], axis=1
-                        )
-                    )[1]
+                logger.debug(
+                    "[addoncage] addons_conn_index is not None, use average of"
+                    " remain atoms"
                 )
             else:
                 logger.debug(
@@ -98,30 +95,44 @@ def add_out_of_cage(
                         addons[addons_conn_index].symbol, addons_conn_index
                     )
                 )
-            logger.debug(
-                "[addoncage] addons_vec is used for rotate [{}]".format(
-                    ", ".join(
-                        [
-                            "{}({})".format(
-                                atom.symbol,
-                                list(atom.position),
-                            )
-                            for index in [addons_index, addons_conn_index]
-                            for atom in [addons[index]]
-                        ]
+                logger.debug(
+                    "[addoncage] addons_vec is used for rotate [{}]".format(
+                        ", ".join(
+                            [
+                                "{}({})".format(
+                                    atom.symbol,
+                                    list(atom.position),
+                                )
+                                for index in [addons_index, addons_conn_index]
+                                for atom in [addons[index]]
+                            ]
+                        )
                     )
+                    + " in addons"
                 )
-                + " in addons"
-            )
             # rotate the addons[addons_index, first_conn] to addons_vec
             # get the rotation matrix
 
-            target_atoms_vec = (
-                addons.positions[addons_conn_index] - addons.positions[addons_index]
-            )
+            if addons_conn_index:
+                target_atoms_vec = (
+                    addons.positions[addons_conn_index] - addons.positions[addons_index]
+                )
+            else:
+                target_atoms_vec = (
+                    np.array(
+                        [
+                            addons.positions[idx]
+                            for idx in range(len(addons.positions))
+                            if idx != addons_index
+                        ]
+                    ).mean(axis=0)
+                    - addons.positions[addons_index]
+                )
             target_atoms_vec = target_atoms_vec / np.linalg.norm(target_atoms_vec)
             addons_vec = addons_vec / np.linalg.norm(addons_vec)
-            rotation_matrix, _ = Rotation.align_vectors(addons_vec, target_atoms_vec)
+            rotation_matrix, _ = Rotation.align_vectors(
+                [addons_vec], [target_atoms_vec]
+            )
             logger.debug(
                 "generate rotation from {} to {}".format(target_atoms_vec, addons_vec)
             )
