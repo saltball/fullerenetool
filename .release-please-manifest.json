@@ -4,5 +4,5 @@
     "bump-patch-for-minor-pre-major": true,
     "prerelease-type": "alpha",
     "prerelease": true,
-    ".": "0.1.0"
+    ".": "0.2.0"
 }

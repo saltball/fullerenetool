@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.2.0](https://github.com/saltball/fullerenetool/compare/v0.1.0...v0.2.0) (2025-02-27)
+
+
+### Features
+
+* **derivative_group:** add DerivativeGroupType enum and coordinate generation for substituents ([5b24bd9](https://github.com/saltball/fullerenetool/commit/5b24bd93be58fafb35332d0117ff30d18a9354a6))
+* **dev_fullerene_flow:** update workflow and add new functionality ([586b7f0](https://github.com/saltball/fullerenetool/commit/586b7f0db99fa18ce89515a112a40b110e3d70cb))
+
+
+### Bug Fixes
+
+* **cage:** enhance error messages with neighbor information ([5b24bd9](https://github.com/saltball/fullerenetool/commit/5b24bd93be58fafb35332d0117ff30d18a9354a6))
+* **operator:** redirect stderr to stdout in gaussian and orca calculations ([31497c8](https://github.com/saltball/fullerenetool/commit/31497c8b003e84a73d7ee4ceb8f57494d6c34667))
+
 ## 0.1.0 (2025-02-17)
 
 
