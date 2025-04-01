@@ -71,14 +71,14 @@ class GetNonisomorphicAddons(OP):
         import jsonpickle
         from ase.io.extxyz import write_extxyz
 
+        from fullerenetool.utils.string_encode import compress_integer_list
+
         fulleren_init = op_in["fulleren_init"]
         addon = op_in["addon"]
         addon_start = op_in["addon_start"]
         start_idx = op_in["start_idx"]
         add_num = op_in["add_num"]
-        identity_string = (
-            "_".join(str(idx) for idx in start_idx) if start_idx else "none"
-        )
+        identity_string = compress_integer_list(start_idx)
 
         dev_groups = [addon] * addon_start
         dev_graph, dev_fullerenes = addons_to_fullerene(
