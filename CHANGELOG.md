@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.0](https://github.com/saltball/fullerenetool/compare/v0.2.0...v0.3.0) (2025-04-01)
+
+
+### Features
+
+* **cage:** modify planarity_graph_pos to conditionally return projection matrix ([1353e4d](https://github.com/saltball/fullerenetool/commit/1353e4d138c89dbaf354ff87d49dc1b2ccce28b9))
+* **fullerene, calculator:** add atomic energy calculation and visualization update ([51387ae](https://github.com/saltball/fullerenetool/commit/51387ae22228ab8e64784c7151c9ed521980078b))
+* **isomer_sort:** update pick_first_n parameter to accept float values and enhance sorting logic ([238561b](https://github.com/saltball/fullerenetool/commit/238561bc013a2fcf29745df337bdd5e721390037))
+* **nonisomorphic_addon:** implement integer list compression for identity strings ([74dce93](https://github.com/saltball/fullerenetool/commit/74dce937964e1a3d00db1ebf88010cbe41d5ff20))
+* **operator:** add DPA2 embedding calculator ([15709a1](https://github.com/saltball/fullerenetool/commit/15709a17029476dd729b3089c1e4acfbec0effc3))
+
+
+### Bug Fixes
+
+* **BondTopoBuilder:** add repulsion parameter to the energy calculation ([c955aab](https://github.com/saltball/fullerenetool/commit/c955aabcb7a4e6bf54c9b8026abd58e45632609a))
+
 ## [0.2.0](https://github.com/saltball/fullerenetool/compare/v0.1.0...v0.2.0) (2025-02-27)
 
 
