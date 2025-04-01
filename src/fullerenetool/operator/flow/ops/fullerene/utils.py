@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List
+from typing import List, Union
 
 from dflow.python import OP, OPIO, Artifact, BigParameter, OPIOSign
 
@@ -59,9 +59,9 @@ class IsomerSort(OP):
     Sort the addons by energy.
 
     Parameters
-    pick_first_n : int
+    pick_first_n : float or int
         The number of addons to be picked, set to 0 to pick all.
-        Negative number means 0.
+        Negative float number means using the energy less than pick_first_n.
     """
 
     def __init__(self):
@@ -75,7 +75,7 @@ class IsomerSort(OP):
                 "energy_list": BigParameter(List[float]),
                 "calculated_atoms_xyz": Artifact(List[Path]),
                 "addon_pos_index_list": BigParameter(List[List[int]]),
-                "pick_first_n": int,
+                "pick_first_n": Union[int, float],
             }
         )
 
@@ -101,6 +101,7 @@ class IsomerSort(OP):
         addon_pos_index_list = op_in["addon_pos_index_list"]
         pick_first_n = op_in["pick_first_n"]
         if pick_first_n > 0:
+            pick_first_n = int(pick_first_n)
             sorted_data = sorted(
                 zip(
                     addons_index_list,
@@ -111,17 +112,27 @@ class IsomerSort(OP):
                 key=lambda x: x[1],
                 reverse=False,
             )[:pick_first_n]
-        else:
-            sorted_data = sorted(
-                zip(
+        elif pick_first_n < 0:
+            threshold = abs(pick_first_n)
+            min_energy = min(energy_list)
+            filtered_data = [
+                (idx, energy, atoms, pos_idx)
+                for idx, energy, atoms, pos_idx in zip(
                     addons_index_list,
                     energy_list,
                     calculated_atoms_xyz,
                     addon_pos_index_list,
-                ),
+                )
+                if energy - min_energy < threshold
+            ]
+            sorted_data = sorted(
+                filtered_data,
                 key=lambda x: x[1],
                 reverse=False,
             )
+
+        else:
+            raise RuntimeError(f"pick_first_n={pick_first_n} is invalid.")
 
         return OPIO(
             {
