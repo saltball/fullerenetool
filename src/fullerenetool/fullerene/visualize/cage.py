@@ -185,7 +185,10 @@ def planarity_graph_pos(
         center_circle,
         project_direct,
     )
-    return project_axis_sp_r, projection_func
+    if return_project_matrix:
+        return project_axis_sp_r, projection_func
+    else:
+        return project_axis_sp_r
 
 
 def planarity_graph_draw(
