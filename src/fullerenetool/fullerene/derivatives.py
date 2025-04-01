@@ -416,7 +416,9 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
         else:
             raise NotImplementedError("Algorithm {} not implemented".format(algorithm))
 
-    def visualize(self, ax=None, color="jmol", atoms=None, **kwargs):
+    def visualize(
+        self, ax=None, color="jmol", atoms=None, project_index=None, **kwargs
+    ):
 
         from ase.data.colors import cpk_colors, jmol_colors
         from matplotlib import pyplot as plt
@@ -426,6 +428,7 @@ class DerivativeFullereneGraph(BaseAbstactGraph):
         cage_pos, project_func = planarity_graph_pos(
             FullereneCage(atoms[self.cage_atom_index]),
             return_project_matrix=True,
+            projection_point=project_index,
         )
         pos = {idx: cage_pos[idx][:2] for idx in range(len(cage_pos))}
 
